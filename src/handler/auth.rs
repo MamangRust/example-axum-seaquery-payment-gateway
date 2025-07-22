@@ -74,12 +74,7 @@ pub async fn get_me_handler(
     State(data): State<Arc<AppState>>,
     Extension(user_id): Extension<i32>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data
-        .di_container
-        .user_service
-        .get_user(user_id as i32)
-        .await
-    {
+    match data.di_container.user_service.get_user(user_id).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
