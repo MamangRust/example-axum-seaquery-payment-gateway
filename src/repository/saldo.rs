@@ -177,12 +177,13 @@ impl SaldoRepositoryTrait for SaldoRepository {
                 SaldoSchema::CreatedAt,
                 SaldoSchema::UpdatedAt,
             ])
-            .values_panic([
+            .values([
                 input.user_id.into(),
                 input.total_balance.into(),
                 now.into(),
                 now.into(),
             ])
+            .unwrap()
             .returning_all()
             .build_sqlx(PostgresQueryBuilder);
 

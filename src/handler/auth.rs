@@ -61,7 +61,7 @@ pub async fn login_user_handler(
 
 #[utoipa::path(
     get,
-    path = "/api/users/me",
+    path = "/api/auth/me",
     responses(
         (status = 200, description = "Get Me user", body = ApiResponse<UserResponse>)
     ),
@@ -72,7 +72,7 @@ pub async fn login_user_handler(
 )]
 pub async fn get_me_handler(
     State(data): State<Arc<AppState>>,
-    Extension(user_id): Extension<i64>,
+    Extension(user_id): Extension<i32>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     match data
         .di_container

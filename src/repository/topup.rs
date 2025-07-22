@@ -193,7 +193,7 @@ impl TopupRepositoryTrait for TopupRepository {
                 Utc::now().naive_utc().into(),
             ])
             .unwrap()
-            .to_owned()
+            .returning_all()
             .build_sqlx(PostgresQueryBuilder);
 
         let created = sqlx::query_as_with(&sql, values)

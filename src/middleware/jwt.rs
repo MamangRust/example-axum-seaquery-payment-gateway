@@ -41,7 +41,7 @@ pub async fn auth(
     };
 
     let user_id = match data.jwt_config.verify_token(&token) {
-        Ok(id) => id,
+        Ok(id) => id as i32,
         Err(_) => {
             return Err((
                 StatusCode::UNAUTHORIZED,

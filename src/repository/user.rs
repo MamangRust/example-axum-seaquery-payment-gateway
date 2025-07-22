@@ -210,8 +210,6 @@ impl UserRepositoryTrait for UserRepository {
                 Users::Email,
                 Users::Password,
                 Users::NocTransfer,
-                Users::CreatedAt,
-                Users::UpdatedAt,
             ])
             .values([
                 input.firstname.clone().into(),
@@ -221,7 +219,7 @@ impl UserRepositoryTrait for UserRepository {
                 input.noc_transfer.clone().into(),
             ])
             .unwrap()
-            .to_owned()
+            .returning_all()
             .build_sqlx(PostgresQueryBuilder);
 
         let user: User = sqlx::query_as_with(&sql, values)

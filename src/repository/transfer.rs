@@ -186,17 +186,15 @@ impl TransferRepositoryTrait for TransferRepository {
                 TransferSchema::TransferTo,
                 TransferSchema::TransferAmount,
                 TransferSchema::TransferTime,
-                TransferSchema::CreatedAt,
-                TransferSchema::UpdatedAt,
             ])
-            .values_panic([
+            .values([
                 input.transfer_from.into(),
                 input.transfer_to.into(),
                 input.transfer_amount.into(),
                 now.into(),
-                now.into(),
-                now.into(),
             ])
+            .unwrap()
+            .returning_all()
             .build_sqlx(PostgresQueryBuilder);
 
         let created = sqlx::query_as_with::<_, Transfer, _>(&sql, values)
