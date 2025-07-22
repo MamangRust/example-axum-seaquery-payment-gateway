@@ -1,0 +1,72 @@
+name: Build and push Rust binary
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - v*
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'src/**'
+      - 'Cargo.*'
+      - '.github/workflows/rust.yml'
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+          override: true
+
+      - name: Run rustfmt
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/mamangrust/example-axum-seaquery-payment-gateway
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+          labels: |
+            org.opencontainers.image.title=example-axum-seaquery-payment-gateway
+            org.opencontainers.image.description=Rust-based REST API with SQLx and migrations
+            org.opencontainers.image.source=https://github.com/mamangrust/example-axum-seaquery-payment-gateway
+            org.opencontainers.image.licenses=MIT
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.MY_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            ghcr.io/mamangrust/example-axum-seaquery-payment-gateway:latest
+          labels: ${{ steps.meta.outputs.labels }}

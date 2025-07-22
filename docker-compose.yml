@@ -1,0 +1,42 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: example_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: example-axum-seaquery-payment-gateway
+    volumes:
+      - postgres_example-axum-seaquery-payment-gateway-data:/var/lib/postgresql/data
+    networks:
+      - app_example_payment_gateway
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d example-axum-seaquery-payment-gateway"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    image: ghcr.io/mamangrust/example-axum-seaquery-payment-gateway:latest
+    container_name: example-axum-seaquery-payment-gateway_app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    networks:
+      - app_example-axum-seaquery-payment-gateway
+    ports:
+      - "8000:8000"
+
+
+volumes:
+  postgres_example-axum-seaquery-payment-gateway-data:
+
+networks:
+  app_example-axum-seaquery-payment-gateway:
+    driver: bridge
