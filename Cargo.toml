@@ -34,3 +34,18 @@ utoipa-swagger-ui = { version = "9.0.1", features = ["axum"] }
 uuid = { version = "1.16.0", features = ["v4"] }
 openssl = { version = "0.10.73", features = ["vendored"] }
 rand = "0.9.1"
+
+
+[profile.dev]
+opt-level = 1
+debug = true
+overflow-checks = true
+lto = false
+codegen-units = 256
+incremental = true
+
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
