@@ -7,6 +7,7 @@ use crate::{
     utils::{AppError, random_vcc},
 };
 use async_trait::async_trait;
+use tracing::{error, info};
 
 pub struct AuthService {
     repository: DynUserRepository,
@@ -34,9 +35,11 @@ impl AuthServiceTrait for AuthService {
         &self,
         input: &RegisterRequest,
     ) -> Result<ApiResponse<UserResponse>, ErrorResponse> {
+        info!("Attempting to register user with email: {}", input.email);
         let exists = self.repository.find_by_email_exists(&input.email).await?;
 
         if exists {
+            error!("Email already exists: {}", input.email);
             return Err(ErrorResponse::from(AppError::EmailAlreadyExists));
         }
 
@@ -44,7 +47,10 @@ impl AuthServiceTrait for AuthService {
             .hashing
             .hash_password(&input.password)
             .await
-            .map_err(|e| ErrorResponse::from(AppError::HashingError(e)))?;
+            .map_err(|e| {
+                error!("Error hashing password: {}", e);
+                ErrorResponse::from(AppError::HashingError(e))
+            })?;
 
         let noc_transfer = random_vcc().ok();
 
@@ -59,6 +65,8 @@ impl AuthServiceTrait for AuthService {
 
         let create_user = self.repository.create_user(&request).await?;
 
+        info!("User registered successfully with email: {}", input.email);
+
         Ok(ApiResponse {
             status: "success".to_string(),
             message: "User registered successfully".to_string(),
@@ -67,11 +75,21 @@ impl AuthServiceTrait for AuthService {
     }
 
     async fn login_user(&self, input: &LoginRequest) -> Result<ApiResponse<String>, ErrorResponse> {
-        let user = self
-            .repository
-            .find_by_email(&input.email)
-            .await?
-            .ok_or_else(|| ErrorResponse::from(AppError::NotFound("User not found".to_string())))?;
+        info!("Attempting to log in user with email: {}", input.email);
+
+        let user = match self.repository.find_by_email(&input.email).await {
+            Ok(Some(user)) => user,
+            Ok(None) => {
+                return Err(ErrorResponse::from(AppError::NotFound(
+                    "User not found".to_string(),
+                )));
+            }
+            Err(err) => {
+                return Err(ErrorResponse::from(err));
+            }
+        };
+
+        info!("User found: {} - {}", input.email, user.user_id);
 
         if self
             .hashing
@@ -79,13 +97,22 @@ impl AuthServiceTrait for AuthService {
             .await
             .is_err()
         {
+            error!("Invalid credentials for user: {}", input.email);
             return Err(ErrorResponse::from(AppError::InvalidCredentials));
         }
 
         let token = self
             .jwt_config
             .generate_token(user.user_id as i64)
-            .map_err(ErrorResponse::from)?;
+            .map_err(|e| {
+                error!(
+                    "Error generating token for user: {}, error: {e}",
+                    input.email,
+                );
+                ErrorResponse::from(e)
+            })?;
+
+        info!("User logged in successfully: {}", input.email);
 
         Ok(ApiResponse {
             status: "success".to_string(),

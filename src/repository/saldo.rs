@@ -49,8 +49,8 @@ impl SaldoRepositoryTrait for SaldoRepository {
                 SaldoSchema::SaldoId,
                 SaldoSchema::UserId,
                 SaldoSchema::TotalBalance,
-                SaldoSchema::UpdatedAt,
                 SaldoSchema::CreatedAt,
+                SaldoSchema::UpdatedAt,
             ])
             .from(SaldoSchema::Table)
             .order_by(SaldoSchema::SaldoId, Order::Asc)
@@ -112,8 +112,8 @@ impl SaldoRepositoryTrait for SaldoRepository {
                 SaldoSchema::SaldoId,
                 SaldoSchema::UserId,
                 SaldoSchema::TotalBalance,
-                SaldoSchema::UpdatedAt,
                 SaldoSchema::CreatedAt,
+                SaldoSchema::UpdatedAt,
             ])
             .and_where(Expr::col(SaldoSchema::SaldoId).eq(id))
             .build_sqlx(PostgresQueryBuilder);
@@ -132,8 +132,8 @@ impl SaldoRepositoryTrait for SaldoRepository {
                 SaldoSchema::SaldoId,
                 SaldoSchema::UserId,
                 SaldoSchema::TotalBalance,
-                SaldoSchema::UpdatedAt,
                 SaldoSchema::CreatedAt,
+                SaldoSchema::UpdatedAt,
             ])
             .and_where(Expr::col(SaldoSchema::UserId).eq(user_id))
             .build_sqlx(PostgresQueryBuilder);

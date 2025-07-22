@@ -182,6 +182,8 @@ impl TopupRepositoryTrait for TopupRepository {
                 TopupSchema::TopupAmount,
                 TopupSchema::TopupMethod,
                 TopupSchema::TopupTime,
+                TopupSchema::CreatedAt,
+                TopupSchema::UpdatedAt,
             ])
             .values([
                 input.user_id.into(),

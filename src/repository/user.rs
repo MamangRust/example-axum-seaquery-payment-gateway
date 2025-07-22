@@ -43,6 +43,9 @@ impl UserRepositoryTrait for UserRepository {
                 Users::Lastname,
                 Users::Email,
                 Users::Password,
+                Users::NocTransfer,
+                Users::CreatedAt,
+                Users::UpdatedAt,
             ])
             .from(Users::Table)
             .order_by(Users::UserId, Order::Asc)
@@ -98,20 +101,40 @@ impl UserRepositoryTrait for UserRepository {
     }
 
     async fn find_by_email_exists(&self, email: &str) -> Result<bool, AppError> {
+        info!("Checking if email exists in database: {}", email);
+
         let (sql, values) = Query::select()
             .expr(Expr::col(Users::UserId).count())
             .from(Users::Table)
             .and_where(Expr::col(Users::Email).eq(email))
             .build_sqlx(PostgresQueryBuilder);
 
+        info!("Generated SQL query: {}", sql);
+
         let count: i64 = sqlx::query_scalar_with(&sql, values)
             .fetch_one(&self.db_pool)
-            .await?;
+            .await
+            .map_err(|e| match &e {
+                sqlx::Error::Database(db_err) => {
+                    error!("Database error when checking email '{email}': {db_err}");
+                    AppError::Custom(format!("Database error: {db_err}"))
+                }
+                sqlx::Error::PoolTimedOut => {
+                    error!("Connection pool timeout when checking email '{email}'");
+                    AppError::Custom("Connection pool timeout".to_string())
+                }
+                _ => {
+                    error!("Unexpected error for '{email}': {e}");
+                    AppError::InternalError(format!("Unexpected database error: {e}"))
+                }
+            })?;
 
         Ok(count > 0)
     }
 
     async fn find_by_email(&self, email: &str) -> Result<Option<User>, AppError> {
+        info!("Finding user by email: {}", email);
+
         let (sql, values) = Query::select()
             .columns([
                 Users::UserId,
@@ -119,15 +142,26 @@ impl UserRepositoryTrait for UserRepository {
                 Users::Lastname,
                 Users::Email,
                 Users::Password,
+                Users::NocTransfer,
+                Users::CreatedAt,
+                Users::UpdatedAt,
             ])
             .from(Users::Table)
             .and_where(Expr::col(Users::Email).eq(email))
             .to_owned()
             .build_sqlx(PostgresQueryBuilder);
 
-        let user = sqlx::query_as_with(&sql, values)
+        let user = sqlx::query_as_with::<_, User, _>(&sql, values)
             .fetch_optional(&self.db_pool)
             .await?;
+
+        if user.is_none() {
+            error!("User with email {email} not found");
+
+            return Err(AppError::NotFound(format!(
+                "User with email {email} not found",
+            )));
+        }
 
         Ok(user)
     }
@@ -142,6 +176,9 @@ impl UserRepositoryTrait for UserRepository {
                 Users::Lastname,
                 Users::Email,
                 Users::Password,
+                Users::NocTransfer,
+                Users::CreatedAt,
+                Users::UpdatedAt,
             ])
             .from(Users::Table)
             .and_where(Expr::col(Users::UserId).eq(id))
@@ -152,9 +189,16 @@ impl UserRepositoryTrait for UserRepository {
             .fetch_optional(&self.db_pool)
             .await?;
 
-        info!("successfully found user by id: {id}");
-
-        Ok(user)
+        match user {
+            Some(_) => {
+                info!("successfully found user by id: {id}");
+                Ok(user)
+            }
+            None => {
+                error!("User with id {id} not found");
+                Err(AppError::NotFound(format!("User with id {id} not found")))
+            }
+        }
     }
 
     async fn create_user(&self, input: &CreateUserRequest) -> Result<User, AppError> {
@@ -166,6 +210,8 @@ impl UserRepositoryTrait for UserRepository {
                 Users::Email,
                 Users::Password,
                 Users::NocTransfer,
+                Users::CreatedAt,
+                Users::UpdatedAt,
             ])
             .values([
                 input.firstname.clone().into(),

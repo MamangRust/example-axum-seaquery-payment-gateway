@@ -54,7 +54,9 @@ pub struct ErrorResponse {
 impl From<AppError> for ErrorResponse {
     fn from(error: AppError) -> Self {
         let (status, message) = match error {
-            AppError::SqlxError(_) => ("error".to_string(), "Database error occurred".to_string()),
+            AppError::SqlxError(e) => {
+                ("error".to_string(), format!("Database error occurred: {e}"))
+            }
             AppError::HashingError(_) => (
                 "error".to_string(),
                 "Error during password hashing".to_string(),
