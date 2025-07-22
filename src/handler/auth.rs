@@ -92,10 +92,13 @@ pub async fn get_me_handler(
 }
 
 pub fn auth_routes(app_state: Arc<AppState>) -> OpenApiRouter {
-    OpenApiRouter::new()
+    let public_routes = OpenApiRouter::new()
         .route("/api/auth/register", post(register_user_handler))
-        .route("/api/auth/login", post(login_user_handler))
+        .route("/api/auth/login", post(login_user_handler));
+
+    let private_routes = OpenApiRouter::new()
         .route("/api/auth/me", get(get_me_handler))
-        .route_layer(middleware::from_fn_with_state(app_state.clone(), jwt::auth))
-        .with_state(app_state.clone())
+        .route_layer(middleware::from_fn_with_state(app_state.clone(), jwt::auth));
+
+    public_routes.merge(private_routes).with_state(app_state)
 }

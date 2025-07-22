@@ -1,20 +1,20 @@
 services:
   db:
     image: postgres:17-alpine
-    container_name: example_postgres
+    container_name: example_postgres_payment_gateway
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: example-axum-seaquery-payment-gateway
+      POSTGRES_DB: payment_gateway_seaquery
     volumes:
       - postgres_example-axum-seaquery-payment-gateway-data:/var/lib/postgresql/data
     networks:
-      - app_example_payment_gateway
+      - app_example-axum-seaquery-payment-gateway
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d example-axum-seaquery-payment-gateway"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d payment_gateway_seaquery"]
       interval: 5s
       timeout: 5s
       retries: 5
