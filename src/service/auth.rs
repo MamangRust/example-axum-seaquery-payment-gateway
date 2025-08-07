@@ -35,11 +35,28 @@ impl AuthServiceTrait for AuthService {
         &self,
         input: &RegisterRequest,
     ) -> Result<ApiResponse<UserResponse>, ErrorResponse> {
-        info!("Attempting to register user with email: {}", input.email);
-        let exists = self.repository.find_by_email_exists(&input.email).await?;
+        info!(
+            "📝 [Auth] Attempting to register user with email: {}",
+            input.email
+        );
+
+        let exists = self
+            .repository
+            .find_by_email_exists(&input.email)
+            .await
+            .map_err(|e| {
+                error!(
+                    "❌ [Auth] Database error while checking email existence: {}",
+                    e
+                );
+                ErrorResponse::from(e)
+            })?;
 
         if exists {
-            error!("Email already exists: {}", input.email);
+            error!(
+                "🛑 [Auth] Registration failed: Email already exists: {}",
+                input.email
+            );
             return Err(ErrorResponse::from(AppError::EmailAlreadyExists));
         }
 
@@ -48,7 +65,7 @@ impl AuthServiceTrait for AuthService {
             .hash_password(&input.password)
             .await
             .map_err(|e| {
-                error!("Error hashing password: {}", e);
+                error!("🔐 [Auth] Failed to hash password: {}", e);
                 ErrorResponse::from(AppError::HashingError(e))
             })?;
 
@@ -63,9 +80,15 @@ impl AuthServiceTrait for AuthService {
             noc_transfer: noc_transfer.to_owned(),
         };
 
-        let create_user = self.repository.create_user(&request).await?;
+        let create_user = self.repository.create_user(&request).await.map_err(|e| {
+            error!("❌ [Auth] Failed to create user in database: {}", e);
+            ErrorResponse::from(e)
+        })?;
 
-        info!("User registered successfully with email: {}", input.email);
+        info!(
+            "✅ [Auth] User registered successfully: ID={}, Email={}",
+            create_user.user_id, input.email
+        );
 
         Ok(ApiResponse {
             status: "success".to_string(),
@@ -75,21 +98,30 @@ impl AuthServiceTrait for AuthService {
     }
 
     async fn login_user(&self, input: &LoginRequest) -> Result<ApiResponse<String>, ErrorResponse> {
-        info!("Attempting to log in user with email: {}", input.email);
+        info!("🔐 [Auth] Login attempt for user: {}", input.email);
 
         let user = match self.repository.find_by_email(&input.email).await {
-            Ok(Some(user)) => user,
+            Ok(Some(user)) => {
+                info!(
+                    "👤 [Auth] User found: ID={}, Email={}",
+                    user.user_id, input.email
+                );
+                user
+            }
             Ok(None) => {
+                error!("❌ [Auth] Login failed: User not found: {}", input.email);
                 return Err(ErrorResponse::from(AppError::NotFound(
                     "User not found".to_string(),
                 )));
             }
             Err(err) => {
+                error!(
+                    "❌ [Auth] Database error during login for {}: {}",
+                    input.email, err
+                );
                 return Err(ErrorResponse::from(err));
             }
         };
-
-        info!("User found: {} - {}", input.email, user.user_id);
 
         if self
             .hashing
@@ -97,7 +129,7 @@ impl AuthServiceTrait for AuthService {
             .await
             .is_err()
         {
-            error!("Invalid credentials for user: {}", input.email);
+            error!("⛔ [Auth] Invalid credentials for user: {}", input.email);
             return Err(ErrorResponse::from(AppError::InvalidCredentials));
         }
 
@@ -106,13 +138,13 @@ impl AuthServiceTrait for AuthService {
             .generate_token(user.user_id as i64)
             .map_err(|e| {
                 error!(
-                    "Error generating token for user: {}, error: {e}",
-                    input.email,
+                    "❌ [Auth] Failed to generate JWT token for user {}: {}",
+                    input.email, e
                 );
                 ErrorResponse::from(e)
             })?;
 
-        info!("User logged in successfully: {}", input.email);
+        info!("✅ [Auth] Login successful for user: {}", input.email);
 
         Ok(ApiResponse {
             status: "success".to_string(),

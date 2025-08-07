@@ -29,13 +29,20 @@ impl UserRepositoryTrait for UserRepository {
         search: Option<String>,
     ) -> Result<(Vec<User>, i64), AppError> {
         info!(
-            "Getting all users - page: {page}, page_size: {page_size}, search: {:?}",
-            search
+            "👥 [Users] Fetching all users - page: {}, page_size: {}, search: {:?}",
+            page, page_size, search
         );
+
+        let page = if page > 0 { page } else { 1 };
+        let page_size = if page_size > 0 { page_size } else { 10 };
         let offset = (page - 1) * page_size;
 
-        let mut select_query = Query::select();
+        info!(
+            "🔢 [Users] Using pagination: LIMIT={} OFFSET={}",
+            page_size, offset
+        );
 
+        let mut select_query = Query::select();
         select_query
             .columns([
                 Users::UserId,
@@ -52,56 +59,70 @@ impl UserRepositoryTrait for UserRepository {
             .limit(page_size as u64)
             .offset(offset as u64);
 
-        if let Some(term) = &search {
+        if let Some(ref term) = search {
             select_query.and_where(Expr::col(Users::Email).like(format!("{term}%")));
+            info!("🔍 [Users] Filtering by email prefix: {}%", term);
         }
 
         let (sql, values) = select_query.build_sqlx(PostgresQueryBuilder);
+        info!("🧾 [Users] Generated SQL: {} | Values: {:?}", sql, values);
 
         let users_result = sqlx::query_as_with::<_, User, _>(&sql, values)
             .fetch_all(&self.db_pool)
             .await;
 
         let users = match users_result {
-            Ok(u) => u,
+            Ok(u) => {
+                info!("✅ [Users] Successfully fetched {} user(s)", u.len());
+                u
+            }
             Err(e) => {
-                error!("Error fetching users: {e}");
+                error!("❌ [Users] Failed to fetch users from database: {}", e);
                 return Err(AppError::SqlxError(e));
             }
         };
-
-        info!("Found {} users", users.len());
 
         let mut count_query = Query::select();
         count_query
             .expr(Func::count(Expr::col(Users::UserId)))
             .from(Users::Table);
 
-        if let Some(term) = &search {
+        if let Some(ref term) = search {
             count_query.and_where(Expr::col(Users::Email).like(format!("{term}%")));
         }
 
         let (count_sql, count_values) = count_query.build_sqlx(PostgresQueryBuilder);
+        info!(
+            "🧮 [Users] Executing count query: {} | Values: {:?}",
+            count_sql, count_values
+        );
 
         let total_result = sqlx::query_as_with::<_, (i64,), _>(&count_sql, count_values)
             .fetch_one(&self.db_pool)
             .await;
 
         let total = match total_result {
-            Ok(count) => count.0,
+            Ok((count,)) => {
+                info!("📊 [Users] Total users matching criteria: {}", count);
+                count
+            }
             Err(e) => {
-                error!("Error counting users: {e}");
+                error!("❌ [Users] Failed to count total users: {}", e);
                 return Err(AppError::SqlxError(e));
             }
         };
 
-        info!("Found {} users out of total {total}", users.len());
+        info!(
+            "🎉 [Users] Pagination complete: {} of {} user(s) returned",
+            users.len(),
+            total
+        );
 
         Ok((users, total))
     }
 
     async fn find_by_email_exists(&self, email: &str) -> Result<bool, AppError> {
-        info!("Checking if email exists in database: {}", email);
+        info!("🔍 Checking if user with email '{}' exists", email);
 
         let (sql, values) = Query::select()
             .expr(Expr::col(Users::UserId).count())
@@ -109,31 +130,44 @@ impl UserRepositoryTrait for UserRepository {
             .and_where(Expr::col(Users::Email).eq(email))
             .build_sqlx(PostgresQueryBuilder);
 
-        info!("Generated SQL query: {}", sql);
+        info!(
+            "🧾 Generated SQL for email existence check: {} | Values: {:?}",
+            sql, values
+        );
 
         let count: i64 = sqlx::query_scalar_with(&sql, values)
             .fetch_one(&self.db_pool)
             .await
             .map_err(|e| match &e {
                 sqlx::Error::Database(db_err) => {
-                    error!("Database error when checking email '{email}': {db_err}");
-                    AppError::Custom(format!("Database error: {db_err}"))
+                    error!(
+                        "🗄️ Database error while checking email '{}': {}",
+                        email, db_err
+                    );
+                    AppError::Custom(format!("Database error: {}", db_err))
                 }
                 sqlx::Error::PoolTimedOut => {
-                    error!("Connection pool timeout when checking email '{email}'");
-                    AppError::Custom("Connection pool timeout".to_string())
+                    error!(
+                        "⏰ Connection pool timeout while checking email '{}'",
+                        email
+                    );
+                    AppError::Custom("Database connection pool timeout".to_string())
                 }
                 _ => {
-                    error!("Unexpected error for '{email}': {e}");
-                    AppError::InternalError(format!("Unexpected database error: {e}"))
+                    error!(
+                        "💥 Unexpected error while checking email '{}': {}",
+                        email, e
+                    );
+                    AppError::InternalError(format!("Unexpected database error: {}", e))
                 }
             })?;
 
+        info!("✅ Email '{}' exists: {}", email, count > 0);
         Ok(count > 0)
     }
 
     async fn find_by_email(&self, email: &str) -> Result<Option<User>, AppError> {
-        info!("Finding user by email: {}", email);
+        info!("📧 Looking up user by email: '{}'", email);
 
         let (sql, values) = Query::select()
             .columns([
@@ -148,26 +182,38 @@ impl UserRepositoryTrait for UserRepository {
             ])
             .from(Users::Table)
             .and_where(Expr::col(Users::Email).eq(email))
-            .to_owned()
             .build_sqlx(PostgresQueryBuilder);
+
+        info!(
+            "🧾 Executing query to find user by email: {} | Values: {:?}",
+            sql, values
+        );
 
         let user = sqlx::query_as_with::<_, User, _>(&sql, values)
             .fetch_optional(&self.db_pool)
-            .await?;
+            .await
+            .map_err(|e| {
+                error!("❌ Failed to query database for email '{}': {}", email, e);
+                AppError::SqlxError(e)
+            })?;
 
-        if user.is_none() {
-            error!("User with email {email} not found");
-
-            return Err(AppError::NotFound(format!(
-                "User with email {email} not found",
-            )));
+        match user {
+            Some(ref u) => {
+                info!(
+                    "✅ User found by email '{}': ID={}, Name={} {}",
+                    email, u.user_id, u.firstname, u.lastname
+                );
+            }
+            None => {
+                error!("👤 User with email '{}' not found in database", email);
+            }
         }
 
         Ok(user)
     }
 
     async fn find_by_id(&self, id: i32) -> Result<Option<User>, AppError> {
-        info!("Finding user by id: {id}");
+        info!("🆔 Looking up user by ID: {}", id);
 
         let (sql, values) = Query::select()
             .columns([
@@ -182,26 +228,42 @@ impl UserRepositoryTrait for UserRepository {
             ])
             .from(Users::Table)
             .and_where(Expr::col(Users::UserId).eq(id))
-            .to_owned()
             .build_sqlx(PostgresQueryBuilder);
 
-        let user = sqlx::query_as_with(&sql, values)
+        info!(
+            "🧾 Executing query to find user by ID: {} | Values: {:?}",
+            sql, values
+        );
+
+        let user = sqlx::query_as_with::<_, User, _>(&sql, values)
             .fetch_optional(&self.db_pool)
-            .await?;
+            .await
+            .map_err(|e| {
+                error!("❌ Database error while fetching user ID {}: {}", id, e);
+                AppError::SqlxError(e)
+            })?;
 
         match user {
-            Some(_) => {
-                info!("successfully found user by id: {id}");
-                Ok(user)
+            Some(ref u) => {
+                info!(
+                    "✅ User found by ID {}: email={}, name={} {}",
+                    id, u.email, u.firstname, u.lastname
+                );
             }
             None => {
-                error!("User with id {id} not found");
-                Err(AppError::NotFound(format!("User with id {id} not found")))
+                error!("❌ User with ID {} not found in database", id);
             }
         }
+
+        Ok(user)
     }
 
     async fn create_user(&self, input: &CreateUserRequest) -> Result<User, AppError> {
+        info!(
+            "👤 [User] Creating new user: {} {}",
+            input.firstname, input.lastname
+        );
+
         let (sql, values) = Query::insert()
             .into_table(Users::Table)
             .columns([
@@ -222,15 +284,28 @@ impl UserRepositoryTrait for UserRepository {
             .returning_all()
             .build_sqlx(PostgresQueryBuilder);
 
+        info!("🧾 [User] INSERT query: {} | Values: {:?}", sql, values);
+
         let user: User = sqlx::query_as_with(&sql, values)
             .fetch_one(&self.db_pool)
-            .await?;
+            .await
+            .map_err(|e| {
+                error!(
+                    "❌ [User] Failed to create user '{} {}': {}",
+                    input.firstname, input.lastname, e
+                );
+                AppError::SqlxError(e)
+            })?;
 
+        info!(
+            "✅ [User] Successfully created user ID: {} | Email: {}",
+            user.user_id, user.email
+        );
         Ok(user)
     }
 
     async fn update_user(&self, input: &UpdateUserRequest) -> Result<User, AppError> {
-        info!("Updating user ID {}", input.id);
+        info!("🔄 [User] Updating user with ID: {}", input.id);
 
         let id = input.id;
 
@@ -239,46 +314,85 @@ impl UserRepositoryTrait for UserRepository {
             .table(Users::Table)
             .and_where(Expr::col(Users::UserId).eq(id));
 
-        if let Some(firstname) = &input.firstname {
+        let mut updated_fields = Vec::new();
+
+        if let Some(ref firstname) = input.firstname {
             query = query.value(Users::Firstname, firstname.clone());
+            updated_fields.push(format!("firstname='{}'", firstname));
         }
 
-        if let Some(lastname) = &input.lastname {
+        if let Some(ref lastname) = input.lastname {
             query = query.value(Users::Lastname, lastname.clone());
+            updated_fields.push(format!("lastname='{}'", lastname));
         }
 
-        if let Some(email) = &input.email {
+        if let Some(ref email) = input.email {
             query = query.value(Users::Email, email.clone());
+            updated_fields.push(format!("email='{}'", email));
+        }
+
+        if updated_fields.is_empty() {
+            info!("🟡 [User] No fields to update for user ID: {}", id);
+            return Err(AppError::Custom(
+                "No fields provided for update".to_string(),
+            ));
         }
 
         query = query.returning_all();
 
         let (sql, values) = query.build_sqlx(PostgresQueryBuilder);
+        info!("🧾 [User] UPDATE query: {} | Values: {:?}", sql, values);
+        info!("📝 [User] Updating fields: {}", updated_fields.join(", "));
 
         let user = sqlx::query_as_with(&sql, values)
             .fetch_one(&self.db_pool)
-            .await?;
+            .await
+            .map_err(|e| match e {
+                sqlx::Error::RowNotFound => {
+                    error!("❌ [User] Update failed: User with ID {} not found", id);
+                    AppError::NotFound(format!("User with ID {} not found", id))
+                }
+                _ => {
+                    error!(
+                        "❌ [User] Database error while updating user ID {}: {}",
+                        id, e
+                    );
+                    AppError::SqlxError(e)
+                }
+            })?;
 
-        info!("User updated with ID: {id}");
-
+        info!(
+            "✅ [User] Successfully updated user ID: {} | Changes: {}",
+            id,
+            updated_fields.join(", ")
+        );
         Ok(user)
     }
 
     async fn delete_user(&self, id: i32) -> Result<(), AppError> {
+        info!("🗑️ [User] Deleting user with ID: {}", id);
+
         let (sql, values) = Query::delete()
             .from_table(Users::Table)
             .and_where(Expr::col(Users::UserId).eq(id))
             .build_sqlx(PostgresQueryBuilder);
 
+        info!("🧾 [User] DELETE query: {} | Values: {:?}", sql, values);
+
         let result = sqlx::query_with(&sql, values)
             .execute(&self.db_pool)
             .await
-            .map_err(AppError::SqlxError)?;
+            .map_err(|e| {
+                error!("❌ [User] Failed to delete user ID {}: {}", id, e);
+                AppError::SqlxError(e)
+            })?;
 
         if result.rows_affected() == 0 {
-            return Err(AppError::NotFound(format!("User ID {id} not found")));
+            error!("❌ [User] Deletion failed: No user found with ID {}", id);
+            return Err(AppError::NotFound(format!("User ID {} not found", id)));
         }
 
+        info!("✅ [User] Successfully deleted user ID: {}", id);
         Ok(())
     }
 }
