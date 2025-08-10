@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Extension, Path, Query, State},
+    extract::{Extension, Path, Query},
     http::StatusCode,
     middleware,
     response::IntoResponse,
@@ -11,6 +11,7 @@ use std::sync::Arc;
 use utoipa_axum::router::OpenApiRouter;
 
 use crate::{
+    abstract_trait::DynSaldoService,
     domain::{
         request::{CreateSaldoRequest, FindAllSaldoRequest, UpdateSaldoRequest},
         response::{ApiResponse, ApiResponsePagination, saldo::SaldoResponse},
@@ -34,10 +35,10 @@ use crate::{
     )
 )]
 pub async fn get_saldos(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynSaldoService>,
     Query(params): Query<FindAllSaldoRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.saldo_service.get_saldos(&params).await {
+    match service.get_saldos(&params).await {
         Ok(saldoes) => Ok((StatusCode::OK, Json(json!(saldoes)))),
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
     }
@@ -60,11 +61,11 @@ pub async fn get_saldos(
     )
 )]
 pub async fn get_saldo(
-    State(data): State<Arc<AppState>>,
     Path(id): Path<i32>,
+    Extension(service): Extension<DynSaldoService>,
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.saldo_service.get_saldo(id).await {
+    match service.get_saldo(id).await {
         Ok(saldo) => Ok((StatusCode::OK, Json(json!(saldo)))),
 
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
@@ -88,11 +89,11 @@ pub async fn get_saldo(
     )
 )]
 pub async fn get_saldo_users(
-    State(data): State<Arc<AppState>>,
     Path(id): Path<i32>,
+    Extension(service): Extension<DynSaldoService>,
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.saldo_service.get_saldo_users(id).await {
+    match service.get_saldo_users(id).await {
         Ok(saldo) => Ok((StatusCode::OK, Json(json!(saldo)))),
 
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
@@ -116,11 +117,11 @@ pub async fn get_saldo_users(
     )
 )]
 pub async fn get_saldo_user(
-    State(data): State<Arc<AppState>>,
     Path(id): Path<i32>,
+    Extension(service): Extension<DynSaldoService>,
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.saldo_service.get_saldo_user(id).await {
+    match service.get_saldo_user(id).await {
         Ok(saldo) => Ok((StatusCode::OK, Json(json!(saldo)))),
 
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
@@ -142,10 +143,10 @@ pub async fn get_saldo_user(
     )
 )]
 pub async fn create_saldo(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynSaldoService>,
     SimpleValidatedJson(body): SimpleValidatedJson<CreateSaldoRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.saldo_service.create_saldo(&body).await {
+    match service.create_saldo(&body).await {
         Ok(response) => Ok((StatusCode::CREATED, Json(json!(response)))),
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
     }
@@ -169,13 +170,13 @@ pub async fn create_saldo(
     )
 )]
 pub async fn update_saldo(
-    State(data): State<Arc<AppState>>,
     Path(id): Path<i32>,
+    Extension(service): Extension<DynSaldoService>,
     SimpleValidatedJson(mut body): SimpleValidatedJson<UpdateSaldoRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     body.saldo_id = id;
 
-    match data.di_container.saldo_service.update_saldo(&body).await {
+    match service.update_saldo(&body).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
 
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
@@ -199,11 +200,11 @@ pub async fn update_saldo(
     )
 )]
 pub async fn delete_saldo(
-    State(data): State<Arc<AppState>>,
     Path(id): Path<i32>,
+    Extension(service): Extension<DynSaldoService>,
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.saldo_service.delete_saldo(id).await {
+    match service.delete_saldo(id).await {
         Ok(_) => Ok((
             StatusCode::OK,
             Json(json!({
@@ -224,6 +225,7 @@ pub fn saldos_routes(app_state: Arc<AppState>) -> OpenApiRouter {
         .route("/api/saldos", post(create_saldo))
         .route("/api/saldos/{id}", put(update_saldo))
         .route("/api/saldos/{id}", delete(delete_saldo))
-        .route_layer(middleware::from_fn_with_state(app_state.clone(), jwt::auth))
-        .with_state(app_state.clone())
+        .route_layer(middleware::from_fn(jwt::auth))
+        .layer(Extension(app_state.di_container.saldo_service.clone()))
+        .layer(Extension(app_state.jwt_service.clone()))
 }

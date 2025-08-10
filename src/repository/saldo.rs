@@ -35,18 +35,15 @@ impl SaldoRepositoryTrait for SaldoRepository {
         search: Option<String>,
     ) -> Result<(Vec<Saldo>, i64), AppError> {
         info!(
-            "💰 [Saldos] Fetching all saldo records - page: {}, page_size: {}, search: {:?}",
-            page, page_size, search
+            "💰 [Saldos] Fetching all saldo records - page: {page}, page_size: {page_size}, search: {:?}",
+            search
         );
 
         let page = if page > 0 { page } else { 1 };
         let page_size = if page_size > 0 { page_size } else { 10 };
         let offset = (page - 1) * page_size;
 
-        info!(
-            "🔢 [Saldos] Using pagination: LIMIT={} OFFSET={}",
-            page_size, offset
-        );
+        info!("🔢 [Saldos] Using pagination: LIMIT={page_size} OFFSET={offset}",);
 
         let mut select_query = Query::select();
         select_query
@@ -66,11 +63,11 @@ impl SaldoRepositoryTrait for SaldoRepository {
 
         if let Some(ref term) = search {
             select_query.and_where(Expr::col(SaldoSchema::UserId).like(format!("{term}%")));
-            info!("🔍 [Saldos] Filtering by user_id prefix: {}%", term);
+            info!("🔍 [Saldos] Filtering by user_id prefix: {term}%");
         }
 
         let (sql, values) = select_query.build_sqlx(PostgresQueryBuilder);
-        info!("🧾 [Saldos] Generated SQL: {} | Values: {:?}", sql, values);
+        info!("🧾 [Saldos] Generated SQL: {sql} | Values: {:?}", values);
 
         let saldos_result = sqlx::query_as_with::<_, Saldo, _>(&sql, values)
             .fetch_all(&self.db_pool)
@@ -85,7 +82,7 @@ impl SaldoRepositoryTrait for SaldoRepository {
                 rows
             }
             Err(e) => {
-                error!("❌ [Saldos] Failed to fetch saldo records: {}", e);
+                error!("❌ [Saldos] Failed to fetch saldo records: {e}");
                 return Err(AppError::SqlxError(e));
             }
         };
@@ -101,8 +98,8 @@ impl SaldoRepositoryTrait for SaldoRepository {
 
         let (count_sql, count_values) = count_query.build_sqlx(PostgresQueryBuilder);
         info!(
-            "📊 [Saldos] Count query: {} | Values: {:?}",
-            count_sql, count_values
+            "📊 [Saldos] Count query: {count_sql} | Values: {:?}",
+            count_values
         );
 
         let total_result = sqlx::query_as_with::<_, (i64,), _>(&count_sql, count_values)
@@ -111,26 +108,25 @@ impl SaldoRepositoryTrait for SaldoRepository {
 
         let total = match total_result {
             Ok((count,)) => {
-                info!("📈 [Saldos] Total matching records: {}", count);
+                info!("📈 [Saldos] Total matching records: {count}");
                 count
             }
             Err(e) => {
-                error!("❌ [Saldos] Failed to count total saldo records: {}", e);
+                error!("❌ [Saldos] Failed to count total saldo records: {e}");
                 return Err(AppError::SqlxError(e));
             }
         };
 
         info!(
-            "🎉 [Saldos] Pagination completed: {} of {} record(s) returned",
+            "🎉 [Saldos] Pagination completed: {} of {total} record(s) returned",
             saldos.len(),
-            total
         );
 
         Ok((saldos, total))
     }
 
     async fn find_by_id(&self, id: i32) -> Result<Option<Saldo>, AppError> {
-        info!("🔍 [Saldo] Finding saldo by ID: {}", id);
+        info!("🔍 [Saldo] Finding saldo by ID: {id}");
 
         let (sql, values) = Query::select()
             .from(SaldoSchema::Table)
@@ -146,16 +142,13 @@ impl SaldoRepositoryTrait for SaldoRepository {
             .and_where(Expr::col(SaldoSchema::SaldoId).eq(id))
             .build_sqlx(PostgresQueryBuilder);
 
-        info!("🧾 [Saldo] Executing query: {} | Values: {:?}", sql, values);
+        info!("🧾 [Saldo] Executing query: {sql} | Values: {:?}", values);
 
         let row = sqlx::query_as_with::<_, Saldo, _>(&sql, values)
             .fetch_optional(&self.db_pool)
             .await
             .map_err(|e| {
-                error!(
-                    "❌ [Saldo] Failed to execute query for saldo_id={}: {}",
-                    id, e
-                );
+                error!("❌ [Saldo] Failed to execute query for saldo_id={id}: {e}",);
                 AppError::SqlxError(e)
             })?;
 
@@ -167,7 +160,7 @@ impl SaldoRepositoryTrait for SaldoRepository {
                 );
             }
             None => {
-                info!("🟡 [Saldo] Not found for saldo_id={}", id);
+                info!("🟡 [Saldo] Not found for saldo_id={id}");
             }
         }
 
@@ -191,28 +184,25 @@ impl SaldoRepositoryTrait for SaldoRepository {
             .and_where(Expr::col(SaldoSchema::UserId).eq(user_id))
             .build_sqlx(PostgresQueryBuilder);
 
-        info!("🧾 [Saldo] Executing query: {} | Values: {:?}", sql, values);
+        info!("🧾 [Saldo] Executing query: {sql} | Values: {:?}", values);
 
         let row = sqlx::query_as_with::<_, Saldo, _>(&sql, values)
             .fetch_optional(&self.db_pool)
             .await
             .map_err(|e| {
-                error!(
-                    "❌ [Saldo] Failed to fetch saldo for user_id={}: {}",
-                    user_id, e
-                );
+                error!("❌ [Saldo] Failed to fetch saldo for user_id={user_id}: {e}",);
                 AppError::SqlxError(e)
             })?;
 
         match &row {
             Some(saldo) => {
                 info!(
-                    "✅ [Saldo] Found saldo for user_id={}: saldo_id={}, balance={}",
-                    user_id, saldo.saldo_id, saldo.total_balance
+                    "✅ [Saldo] Found saldo for user_id={user_id}: saldo_id={}, balance={}",
+                    saldo.saldo_id, saldo.total_balance
                 );
             }
             None => {
-                info!("🟡 [Saldo] No saldo found for user_id={}", user_id);
+                info!("🟡 [Saldo] No saldo found for user_id={user_id}");
             }
         }
 
@@ -220,7 +210,7 @@ impl SaldoRepositoryTrait for SaldoRepository {
     }
 
     async fn find_by_users_id(&self, user_id: i32) -> Result<Vec<Saldo>, AppError> {
-        info!("👥 [Saldo] Finding all saldos for user_id: {}", user_id);
+        info!("👥 [Saldo] Finding all saldos for user_id: {user_id}");
 
         let (sql, values) = Query::select()
             .from(SaldoSchema::Table)
@@ -237,23 +227,19 @@ impl SaldoRepositoryTrait for SaldoRepository {
             .order_by(SaldoSchema::SaldoId, Order::Asc)
             .build_sqlx(PostgresQueryBuilder);
 
-        info!("🧾 [Saldo] Executing query: {} | Values: {:?}", sql, values);
+        info!("🧾 [Saldo] Executing query: {sql} | Values: {:?}", values);
 
         let rows = sqlx::query_as_with::<_, Saldo, _>(&sql, values)
             .fetch_all(&self.db_pool)
             .await
             .map_err(|e| {
-                error!(
-                    "❌ [Saldo] Failed to fetch saldos for user_id={}: {}",
-                    user_id, e
-                );
+                error!("❌ [Saldo] Failed to fetch saldos for user_id={user_id}: {e}",);
                 AppError::SqlxError(e)
             })?;
 
         info!(
-            "✅ [Saldo] Retrieved {} saldo record(s) for user_id={}",
+            "✅ [Saldo] Retrieved {} saldo record(s) for user_id={user_id}",
             rows.len(),
-            user_id
         );
 
         Ok(rows)
@@ -285,15 +271,15 @@ impl SaldoRepositoryTrait for SaldoRepository {
             .returning_all()
             .build_sqlx(PostgresQueryBuilder);
 
-        info!("🧾 [Saldo] INSERT query: {} | Values: {:?}", sql, values);
+        info!("🧾 [Saldo] INSERT query: {sql} | Values: {:?}", values);
 
         let inserted: Saldo = sqlx::query_as_with::<_, Saldo, _>(&sql, values)
             .fetch_one(&self.db_pool)
             .await
             .map_err(|e| {
                 error!(
-                    "❌ [Saldo] Failed to create saldo for user_id={}: {}",
-                    input.user_id, e
+                    "❌ [Saldo] Failed to create saldo for user_id={}: {e}",
+                    input.user_id,
                 );
                 AppError::SqlxError(e)
             })?;
@@ -321,8 +307,8 @@ impl SaldoRepositoryTrait for SaldoRepository {
             .await
             .map_err(|e| {
                 error!(
-                    "❌ [Saldo] Database error while fetching current balance for saldo_id={}: {}",
-                    input.saldo_id, e
+                    "❌ [Saldo] Database error while fetching current balance for saldo_id={}: {e}",
+                    input.saldo_id,
                 );
                 AppError::SqlxError(e)
             })?;
@@ -359,15 +345,15 @@ impl SaldoRepositoryTrait for SaldoRepository {
             .build_sqlx(PostgresQueryBuilder);
 
         info!(
-            "🧾 [Saldo] Executing UPDATE: {} | Values: {:?}",
-            update_sql, update_values
+            "🧾 [Saldo] Executing UPDATE: {update_sql} | Values: {:?}",
+            update_values
         );
 
         let updated: Saldo = sqlx::query_as_with::<_, Saldo, _>(&update_sql, update_values)
             .fetch_one(&self.db_pool)
             .await
             .map_err(|e| {
-                error!("❌ [Saldo] Failed to update saldo ID {}: {}", saldo_id, e);
+                error!("❌ [Saldo] Failed to update saldo ID {saldo_id}: {e}");
                 AppError::SqlxError(e)
             })?;
 
@@ -399,8 +385,8 @@ impl SaldoRepositoryTrait for SaldoRepository {
             .await
             .map_err(|e| {
                 error!(
-                    "❌ [Saldo] Database error while fetching saldo_id for user_id={}: {}",
-                    input.user_id, e
+                    "❌ [Saldo] Database error while fetching saldo_id for user_id={}: {e}",
+                    input.user_id
                 );
                 AppError::SqlxError(e)
             })?;
@@ -415,18 +401,15 @@ impl SaldoRepositoryTrait for SaldoRepository {
             .build_sqlx(PostgresQueryBuilder);
 
         info!(
-            "🧾 [Saldo] Executing balance update: {} | Values: {:?}",
-            update_sql, update_values
+            "🧾 [Saldo] Executing balance update: {update_sql} | Values: {:?}",
+            update_values
         );
 
         let updated: Saldo = sqlx::query_as_with::<_, Saldo, _>(&update_sql, update_values)
             .fetch_one(&self.db_pool)
             .await
             .map_err(|e| {
-                error!(
-                    "❌ [Saldo] Failed to update balance for saldo_id={}: {}",
-                    saldo_id, e
-                );
+                error!("❌ [Saldo] Failed to update balance for saldo_id={saldo_id}: {e}",);
                 AppError::SqlxError(e)
             })?;
 
@@ -462,8 +445,8 @@ impl SaldoRepositoryTrait for SaldoRepository {
         let withdraw_amount: i32 = input.withdraw_amount.unwrap_or(0);
         if current_balance < withdraw_amount {
             error!(
-                "❌ [Saldo] Insufficient balance: {} < {} for user_id={}",
-                current_balance, withdraw_amount, input.user_id
+                "❌ [Saldo] Insufficient balance: {current_balance} < {withdraw_amount} for user_id={}",
+                input.user_id
             );
             return Err(AppError::Custom("Insufficient balance".into()));
         }
@@ -493,8 +476,8 @@ impl SaldoRepositoryTrait for SaldoRepository {
             .await
             .map_err(|e| {
                 error!(
-                    "❌ [Saldo] Failed to update saldo (withdraw) for user_id={}: {}",
-                    input.user_id, e
+                    "❌ [Saldo] Failed to update saldo (withdraw) for user_id={}: {e}",
+                    input.user_id,
                 );
                 AppError::SqlxError(e)
             })?;
@@ -508,32 +491,29 @@ impl SaldoRepositoryTrait for SaldoRepository {
     }
 
     async fn delete(&self, id: i32) -> Result<(), AppError> {
-        info!("🗑️ [Saldo] Deleting saldo with ID: {}", id);
+        info!("🗑️ [Saldo] Deleting saldo with ID: {id}");
 
         let (sql, values) = Query::delete()
             .from_table(SaldoSchema::Table)
             .and_where(Expr::col(SaldoSchema::SaldoId).eq(id))
             .build_sqlx(PostgresQueryBuilder);
 
-        info!("🧾 [Saldo] DELETE query: {} | Values: {:?}", sql, values);
+        info!("🧾 [Saldo] DELETE query: {sql} | Values: {:?}", values);
 
         let result = sqlx::query_with(&sql, values)
             .execute(&self.db_pool)
             .await
             .map_err(|e| {
-                error!("❌ [Saldo] Failed to delete saldo ID {}: {}", id, e);
+                error!("❌ [Saldo] Failed to delete saldo ID {id}: {e}");
                 AppError::SqlxError(e)
             })?;
 
         if result.rows_affected() == 0 {
-            error!("❌ [Saldo] Deletion failed: No saldo found with ID {}", id);
-            return Err(AppError::NotFound(format!(
-                "Saldo with ID {} not found",
-                id
-            )));
+            error!("❌ [Saldo] Deletion failed: No saldo found with ID {id}");
+            return Err(AppError::NotFound(format!("Saldo with ID {id} not found",)));
         }
 
-        info!("✅ [Saldo] Successfully deleted saldo ID: {}", id);
+        info!("✅ [Saldo] Successfully deleted saldo ID: {id}");
         Ok(())
     }
 }

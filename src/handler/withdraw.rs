@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Extension, Path, Query, State},
+    extract::{Extension, Path, Query},
     http::StatusCode,
     middleware,
     response::IntoResponse,
@@ -11,6 +11,7 @@ use std::sync::Arc;
 use utoipa_axum::router::OpenApiRouter;
 
 use crate::{
+    abstract_trait::DynWithdrawService,
     domain::{
         request::{CreateWithdrawRequest, FindAllWithdrawRequest, UpdateWithdrawRequest},
         response::{ApiResponse, ApiResponsePagination, withdraw::WithdrawResponse},
@@ -34,15 +35,10 @@ use crate::{
     )
 )]
 pub async fn get_withdraws(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynWithdrawService>,
     Query(params): Query<FindAllWithdrawRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data
-        .di_container
-        .withdraw_service
-        .get_withdraws(&params)
-        .await
-    {
+    match service.get_withdraws(&params).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
     }
@@ -65,11 +61,11 @@ pub async fn get_withdraws(
     )
 )]
 pub async fn get_withdraw(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynWithdrawService>,
     Path(id): Path<i32>,
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.withdraw_service.get_withdraw(id).await {
+    match service.get_withdraw(id).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
 
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
@@ -93,16 +89,11 @@ pub async fn get_withdraw(
     )
 )]
 pub async fn get_withdraw_users(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynWithdrawService>,
     Path(id): Path<i32>,
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data
-        .di_container
-        .withdraw_service
-        .get_withdraw_users(id)
-        .await
-    {
+    match service.get_withdraw_users(id).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
 
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
@@ -126,16 +117,11 @@ pub async fn get_withdraw_users(
     )
 )]
 pub async fn get_withdraw_user(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynWithdrawService>,
     Path(id): Path<i32>,
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data
-        .di_container
-        .withdraw_service
-        .get_withdraw_user(id)
-        .await
-    {
+    match service.get_withdraw_user(id).await {
         Ok(saldo) => Ok((StatusCode::OK, Json(json!(saldo)))),
 
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
@@ -157,15 +143,10 @@ pub async fn get_withdraw_user(
     )
 )]
 pub async fn create_withdraw(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynWithdrawService>,
     SimpleValidatedJson(body): SimpleValidatedJson<CreateWithdrawRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data
-        .di_container
-        .withdraw_service
-        .create_withdraw(&body)
-        .await
-    {
+    match service.create_withdraw(&body).await {
         Ok(response) => Ok((StatusCode::CREATED, Json(json!(response)))),
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
     }
@@ -189,18 +170,13 @@ pub async fn create_withdraw(
     )
 )]
 pub async fn update_withdraw(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynWithdrawService>,
     Path(id): Path<i32>,
     SimpleValidatedJson(mut body): SimpleValidatedJson<UpdateWithdrawRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     body.withdraw_id = id;
 
-    match data
-        .di_container
-        .withdraw_service
-        .update_withdraw(&body)
-        .await
-    {
+    match service.update_withdraw(&body).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
 
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
@@ -224,11 +200,11 @@ pub async fn update_withdraw(
     )
 )]
 pub async fn delete_withdraw(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynWithdrawService>,
     Path(id): Path<i32>,
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.withdraw_service.delete_withdraw(id).await {
+    match service.delete_withdraw(id).await {
         Ok(_) => Ok((
             StatusCode::OK,
             Json(json!({
@@ -249,6 +225,7 @@ pub fn withdraw_routes(app_state: Arc<AppState>) -> OpenApiRouter {
         .route("/api/withdraws", post(create_withdraw))
         .route("/api/withdraws/{id}", put(update_withdraw))
         .route("/api/withdraws/{id}", delete(delete_withdraw))
-        .route_layer(middleware::from_fn_with_state(app_state.clone(), jwt::auth))
-        .with_state(app_state.clone())
+        .route_layer(middleware::from_fn(jwt::auth))
+        .layer(Extension(app_state.di_container.withdraw_service.clone()))
+        .layer(Extension(app_state.jwt_service.clone()))
 }

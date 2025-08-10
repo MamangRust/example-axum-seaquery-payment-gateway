@@ -34,18 +34,15 @@ impl TransferRepositoryTrait for TransferRepository {
         search: Option<String>,
     ) -> Result<(Vec<Transfer>, i64), AppError> {
         info!(
-            "🔄 [Transfers] Fetching transfers - page: {}, page_size: {}, search: {:?}",
-            page, page_size, search
+            "🔄 [Transfers] Fetching transfers - page: {page}, page_size: {page_size}, search: {:?}",
+            search
         );
 
         let page = if page > 0 { page } else { 1 };
         let page_size = if page_size > 0 { page_size } else { 10 };
         let offset = (page - 1) * page_size;
 
-        info!(
-            "🔢 [Transfers] Using pagination: LIMIT={} OFFSET={}",
-            page_size, offset
-        );
+        info!("🔢 [Transfers] Using pagination: LIMIT={page_size} OFFSET={offset}");
 
         let mut select_query = Query::select();
         select_query
@@ -66,17 +63,11 @@ impl TransferRepositoryTrait for TransferRepository {
         if let Some(ref term) = search {
             select_query
                 .and_where(Expr::col(TransferSchema::TransferFrom).like(format!("{term}%")));
-            info!(
-                "🔍 [Transfers] Filtering by sender (transfer_from) like: {}%",
-                term
-            );
+            info!("🔍 [Transfers] Filtering by sender (transfer_from) like: {term}%");
         }
 
         let (sql, values) = select_query.build_sqlx(PostgresQueryBuilder);
-        info!(
-            "🧾 [Transfers] Generated SQL: {} | Values: {:?}",
-            sql, values
-        );
+        info!("🧾 [Transfers] Generated SQL: {sql} | Values: {:?}", values);
 
         let transfer_result = sqlx::query_as_with::<_, Transfer, _>(&sql, values)
             .fetch_all(&self.db_pool)
@@ -91,7 +82,7 @@ impl TransferRepositoryTrait for TransferRepository {
                 rows
             }
             Err(e) => {
-                error!("❌ [Transfers] Failed to fetch transfers: {}", e);
+                error!("❌ [Transfers] Failed to fetch transfers: {e}");
                 return Err(AppError::SqlxError(e));
             }
         };
@@ -107,8 +98,8 @@ impl TransferRepositoryTrait for TransferRepository {
 
         let (count_sql, count_values) = count_query.build_sqlx(PostgresQueryBuilder);
         info!(
-            "📊 [Transfers] Count query: {} | Values: {:?}",
-            count_sql, count_values
+            "📊 [Transfers] Count query: {count_sql} | Values: {:?}",
+            count_values
         );
 
         let total_result = sqlx::query_as_with::<_, (i64,), _>(&count_sql, count_values)
@@ -117,7 +108,7 @@ impl TransferRepositoryTrait for TransferRepository {
 
         let total = match total_result {
             Ok((count,)) => {
-                info!("📈 [Transfers] Total matching transfers: {}", count);
+                info!("📈 [Transfers] Total matching transfers: {count}");
                 count
             }
             Err(e) => {
@@ -127,16 +118,15 @@ impl TransferRepositoryTrait for TransferRepository {
         };
 
         info!(
-            "🎉 [Transfers] Pagination complete: {} of {} transfer(s) returned",
+            "🎉 [Transfers] Pagination complete: {} of {total} transfer(s) returned",
             transfers.len(),
-            total
         );
 
         Ok((transfers, total))
     }
 
     async fn find_by_id(&self, id: i32) -> Result<Option<Transfer>, AppError> {
-        info!("🆔 [Transfers] Finding transfer by ID: {}", id);
+        info!("🆔 [Transfers] Finding transfer by ID: {id}");
 
         let (sql, values) = Query::select()
             .from(TransferSchema::Table)
@@ -153,18 +143,15 @@ impl TransferRepositoryTrait for TransferRepository {
             .build_sqlx(PostgresQueryBuilder);
 
         info!(
-            "🧾 [Transfers] Executing query: {} | Values: {:?}",
-            sql, values
+            "🧾 [Transfers] Executing query: {sql} | Values: {:?}",
+            values
         );
 
         let row = sqlx::query_as_with::<_, Transfer, _>(&sql, values)
             .fetch_optional(&self.db_pool)
             .await
             .map_err(|e| {
-                error!(
-                    "❌ [Transfers] Database error while fetching transfer ID {}: {}",
-                    id, e
-                );
+                error!("❌ [Transfers] Database error while fetching transfer ID {id}: {e}");
                 AppError::SqlxError(e)
             })?;
 
@@ -179,7 +166,7 @@ impl TransferRepositoryTrait for TransferRepository {
                 );
             }
             None => {
-                info!("🟡 [Transfers] No transfer found with ID: {}", id);
+                info!("🟡 [Transfers] No transfer found with ID: {id}");
             }
         }
 
@@ -187,10 +174,7 @@ impl TransferRepositoryTrait for TransferRepository {
     }
 
     async fn find_by_users(&self, id: i32) -> Result<Vec<Transfer>, AppError> {
-        info!(
-            "👥 [Transfers] Fetching all transfers sent by user ID: {}",
-            id
-        );
+        info!("👥 [Transfers] Fetching all transfers sent by user ID: {id}");
 
         let (sql, values) = Query::select()
             .from(TransferSchema::Table)
@@ -207,35 +191,28 @@ impl TransferRepositoryTrait for TransferRepository {
             .build_sqlx(PostgresQueryBuilder);
 
         info!(
-            "🧾 [Transfers] Executing query: {} | Values: {:?}",
-            sql, values
+            "🧾 [Transfers] Executing query: {sql} | Values: {:?}",
+            values
         );
 
         let rows = sqlx::query_as_with::<_, Transfer, _>(&sql, values)
             .fetch_all(&self.db_pool)
             .await
             .map_err(|e| {
-                error!(
-                    "❌ [Transfers] Failed to fetch transfers for sender user ID {}: {}",
-                    id, e
-                );
+                error!("❌ [Transfers] Failed to fetch transfers for sender user ID {id}: {e}");
                 AppError::SqlxError(e)
             })?;
 
         info!(
-            "✅ [Transfers] Successfully fetched {} transfer(s) for sender user ID: {}",
+            "✅ [Transfers] Successfully fetched {} transfer(s) for sender user ID: {id}",
             rows.len(),
-            id
         );
 
         Ok(rows)
     }
 
     async fn find_by_user(&self, user_id: i32) -> Result<Option<Transfer>, AppError> {
-        info!(
-            "👤 [Transfers] Finding one transfer sent by user ID: {}",
-            user_id
-        );
+        info!("👤 [Transfers] Finding one transfer sent by user ID: {user_id}",);
 
         let (sql, values) = Query::select()
             .from(TransferSchema::Table)
@@ -252,8 +229,8 @@ impl TransferRepositoryTrait for TransferRepository {
             .build_sqlx(PostgresQueryBuilder);
 
         info!(
-            "🧾 [Transfers] Executing query: {} | Values: {:?}",
-            sql, values
+            "🧾 [Transfers] Executing query: {sql} | Values: {:?}",
+            values
         );
 
         let row = sqlx::query_as_with::<_, Transfer, _>(&sql, values)
@@ -261,8 +238,7 @@ impl TransferRepositoryTrait for TransferRepository {
             .await
             .map_err(|e| {
                 error!(
-                    "❌ [Transfers] Database error while finding transfer for user ID {}: {}",
-                    user_id, e
+                    "❌ [Transfers] Database error while finding transfer for user ID {user_id}: {e}"
                 );
                 AppError::SqlxError(e)
             })?;
@@ -270,12 +246,12 @@ impl TransferRepositoryTrait for TransferRepository {
         match &row {
             Some(transfer) => {
                 info!(
-                    "✅ [Transfers] Found transfer for user ID {}: ID={}, Amount={}",
-                    user_id, transfer.transfer_id, transfer.transfer_amount
+                    "✅ [Transfers] Found transfer for user ID {user_id}: ID={}, Amount={}",
+                    transfer.transfer_id, transfer.transfer_amount
                 );
             }
             None => {
-                info!("🟡 [Transfers] No transfer found for user ID: {}", user_id);
+                info!("🟡 [Transfers] No transfer found for user ID: {user_id}");
             }
         }
 
@@ -308,18 +284,15 @@ impl TransferRepositoryTrait for TransferRepository {
             .returning_all()
             .build_sqlx(PostgresQueryBuilder);
 
-        info!(
-            "🧾 [Transfers] INSERT query: {} | Values: {:?}",
-            sql, values
-        );
+        info!("🧾 [Transfers] INSERT query: {sql} | Values: {:?}", values);
 
         let created = sqlx::query_as_with::<_, Transfer, _>(&sql, values)
             .fetch_one(&self.db_pool)
             .await
             .map_err(|e| {
                 error!(
-                    "❌ [Transfers] Failed to create transfer ({} → {}): {}",
-                    input.transfer_from, input.transfer_to, e
+                    "❌ [Transfers] Failed to create transfer ({} → {}): {e}",
+                    input.transfer_from, input.transfer_to,
                 );
                 AppError::SqlxError(e)
             })?;
@@ -352,10 +325,7 @@ impl TransferRepositoryTrait for TransferRepository {
             .and_where(Expr::col(TransferSchema::TransferId).eq(input.transfer_id))
             .build_sqlx(PostgresQueryBuilder);
 
-        info!(
-            "🧾 [Transfers] UPDATE query: {} | Values: {:?}",
-            sql, values
-        );
+        info!("🧾 [Transfers] UPDATE query: {sql} | Values: {:?}", values);
 
         let updated = sqlx::query_as_with::<_, Transfer, _>(&sql, values)
             .fetch_one(&self.db_pool)
@@ -370,8 +340,8 @@ impl TransferRepositoryTrait for TransferRepository {
                 }
                 _ => {
                     error!(
-                        "❌ [Transfers] Database error updating transfer ID {}: {}",
-                        input.transfer_id, e
+                        "❌ [Transfers] Database error updating transfer ID {}: {e}",
+                        input.transfer_id,
                     );
                     AppError::SqlxError(e)
                 }
@@ -409,8 +379,8 @@ impl TransferRepositoryTrait for TransferRepository {
             .build_sqlx(PostgresQueryBuilder);
 
         info!(
-            "🧾 [Transfers] UPDATE amount query: {} | Values: {:?}",
-            sql, values
+            "🧾 [Transfers] UPDATE amount query: {sql} | Values: {:?}",
+            values
         );
 
         let updated = sqlx::query_as_with::<_, Transfer, _>(&sql, values)
@@ -426,8 +396,8 @@ impl TransferRepositoryTrait for TransferRepository {
                 }
                 _ => {
                     error!(
-                        "❌ [Transfers] Database error updating amount for transfer ID {}: {}",
-                        input.transfer_id, e
+                        "❌ [Transfers] Database error updating amount for transfer ID {}: {e}",
+                        input.transfer_id,
                     );
                     AppError::SqlxError(e)
                 }
@@ -442,37 +412,31 @@ impl TransferRepositoryTrait for TransferRepository {
     }
 
     async fn delete(&self, id: i32) -> Result<(), AppError> {
-        info!("🗑️ [Transfers] Deleting transfer with ID: {}", id);
+        info!("🗑️ [Transfers] Deleting transfer with ID: {id}");
 
         let (sql, values) = Query::delete()
             .from_table(TransferSchema::Table)
             .and_where(Expr::col(TransferSchema::TransferId).eq(id))
             .build_sqlx(PostgresQueryBuilder);
 
-        info!(
-            "🧾 [Transfers] DELETE query: {} | Values: {:?}",
-            sql, values
-        );
+        info!("🧾 [Transfers] DELETE query: {sql} | Values: {:?}", values);
 
         let result = sqlx::query_with(&sql, values)
             .execute(&self.db_pool)
             .await
             .map_err(|e| {
-                error!("❌ [Transfers] Failed to delete transfer ID {}: {}", id, e);
+                error!("❌ [Transfers] Failed to delete transfer ID {id}: {e}");
                 AppError::SqlxError(e)
             })?;
 
         if result.rows_affected() == 0 {
-            error!(
-                "❌ [Transfers] Deletion failed: No transfer found with ID {}",
-                id
-            );
+            error!("❌ [Transfers] Deletion failed: No transfer found with ID {id}");
             return Err(AppError::NotFound(format!(
                 "Transfer with ID {id} not found"
             )));
         }
 
-        info!("✅ [Transfers] Successfully deleted transfer ID: {}", id);
+        info!("✅ [Transfers] Successfully deleted transfer ID: {id}");
         Ok(())
     }
 }

@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Extension, Path, Query, State},
+    extract::{Extension, Path, Query},
     http::StatusCode,
     middleware,
     response::IntoResponse,
@@ -11,6 +11,7 @@ use std::sync::Arc;
 use utoipa_axum::router::OpenApiRouter;
 
 use crate::{
+    abstract_trait::DynTopupService,
     domain::{
         request::{CreateTopupRequest, FindAllTopupRequest, UpdateTopupRequest},
         response::{ApiResponse, ApiResponsePagination, topup::TopupResponse},
@@ -34,10 +35,10 @@ use crate::{
     )
 )]
 pub async fn get_topups(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynTopupService>,
     Query(params): Query<FindAllTopupRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.topup_service.get_topups(&params).await {
+    match service.get_topups(&params).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
     }
@@ -60,11 +61,11 @@ pub async fn get_topups(
     )
 )]
 pub async fn get_topup(
-    State(data): State<Arc<AppState>>,
     Path(id): Path<i32>,
+    Extension(service): Extension<DynTopupService>,
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.topup_service.get_topup(id).await {
+    match service.get_topup(id).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
 
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
@@ -88,11 +89,11 @@ pub async fn get_topup(
     )
 )]
 pub async fn get_topup_users(
-    State(data): State<Arc<AppState>>,
     Path(id): Path<i32>,
+    Extension(service): Extension<DynTopupService>,
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.topup_service.get_topup_users(id).await {
+    match service.get_topup_users(id).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
 
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
@@ -116,11 +117,11 @@ pub async fn get_topup_users(
     )
 )]
 pub async fn get_topup_user(
-    State(data): State<Arc<AppState>>,
     Path(id): Path<i32>,
+    Extension(service): Extension<DynTopupService>,
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.topup_service.get_topup_user(id).await {
+    match service.get_topup_user(id).await {
         Ok(saldo) => Ok((StatusCode::OK, Json(json!(saldo)))),
 
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
@@ -142,10 +143,10 @@ pub async fn get_topup_user(
     )
 )]
 pub async fn create_topup(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynTopupService>,
     SimpleValidatedJson(body): SimpleValidatedJson<CreateTopupRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.topup_service.create_topup(&body).await {
+    match service.create_topup(&body).await {
         Ok(response) => Ok((StatusCode::CREATED, Json(json!(response)))),
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
     }
@@ -169,13 +170,13 @@ pub async fn create_topup(
     )
 )]
 pub async fn update_topup(
-    State(data): State<Arc<AppState>>,
     Path(id): Path<i32>,
+    Extension(service): Extension<DynTopupService>,
     SimpleValidatedJson(mut body): SimpleValidatedJson<UpdateTopupRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     body.topup_id = id;
 
-    match data.di_container.topup_service.update_topup(&body).await {
+    match service.update_topup(&body).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
 
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
@@ -199,11 +200,11 @@ pub async fn update_topup(
     )
 )]
 pub async fn delete_topup(
-    State(data): State<Arc<AppState>>,
     Path(id): Path<i32>,
+    Extension(service): Extension<DynTopupService>,
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.topup_service.delete_topup(id).await {
+    match service.delete_topup(id).await {
         Ok(_) => Ok((
             StatusCode::OK,
             Json(json!({
@@ -224,6 +225,7 @@ pub fn topup_routes(app_state: Arc<AppState>) -> OpenApiRouter {
         .route("/api/topups", post(create_topup))
         .route("/api/topups/{id}", put(update_topup))
         .route("/api/topups/{id}", delete(delete_topup))
-        .route_layer(middleware::from_fn_with_state(app_state.clone(), jwt::auth))
-        .with_state(app_state.clone())
+        .route_layer(middleware::from_fn(jwt::auth))
+        .layer(Extension(app_state.di_container.topup_service.clone()))
+        .layer(Extension(app_state.jwt_service.clone()))
 }

@@ -1,6 +1,5 @@
 use axum::{
     Extension, Json,
-    extract::State,
     http::StatusCode,
     middleware,
     response::IntoResponse,
@@ -11,6 +10,7 @@ use std::sync::Arc;
 use utoipa_axum::router::OpenApiRouter;
 
 use crate::{
+    abstract_trait::{DynAuthService, DynUserService},
     domain::{
         request::{LoginRequest, RegisterRequest},
         response::{ApiResponse, user::UserResponse},
@@ -30,10 +30,10 @@ use crate::{
     tag = "Auth"
 )]
 pub async fn register_user_handler(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynAuthService>,
     SimpleValidatedJson(body): SimpleValidatedJson<RegisterRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<Value>)> {
-    match data.di_container.auth_service.register_user(&body).await {
+    match service.register_user(&body).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
     }
@@ -50,10 +50,10 @@ pub async fn register_user_handler(
     tag = "Auth"
 )]
 pub async fn login_user_handler(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynAuthService>,
     SimpleValidatedJson(body): SimpleValidatedJson<LoginRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<Value>)> {
-    match data.di_container.auth_service.login_user(&body).await {
+    match service.login_user(&body).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
         Err(e) => Err((StatusCode::UNAUTHORIZED, Json(json!(e)))),
     }
@@ -71,10 +71,10 @@ pub async fn login_user_handler(
     tag = "Auth",
 )]
 pub async fn get_me_handler(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynUserService>,
     Extension(user_id): Extension<i32>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.user_service.get_user(user_id).await {
+    match service.get_user(user_id).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -89,11 +89,14 @@ pub async fn get_me_handler(
 pub fn auth_routes(app_state: Arc<AppState>) -> OpenApiRouter {
     let public_routes = OpenApiRouter::new()
         .route("/api/auth/register", post(register_user_handler))
-        .route("/api/auth/login", post(login_user_handler));
+        .route("/api/auth/login", post(login_user_handler))
+        .layer(Extension(app_state.di_container.auth_service.clone()));
 
     let private_routes = OpenApiRouter::new()
         .route("/api/auth/me", get(get_me_handler))
-        .route_layer(middleware::from_fn_with_state(app_state.clone(), jwt::auth));
+        .route_layer(middleware::from_fn(jwt::auth))
+        .layer(Extension(app_state.di_container.user_service.clone()))
+        .layer(Extension(app_state.jwt_service.clone()));
 
-    public_routes.merge(private_routes).with_state(app_state)
+    public_routes.merge(private_routes)
 }

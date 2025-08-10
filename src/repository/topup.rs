@@ -32,18 +32,15 @@ impl TopupRepositoryTrait for TopupRepository {
         search: Option<String>,
     ) -> Result<(Vec<Topup>, i64), AppError> {
         info!(
-            "💳 [Topups] Fetching all topups - page: {}, page_size: {}, search: {:?}",
-            page, page_size, search
+            "💳 [Topups] Fetching all topups - page: {page}, page_size: {page_size}, search: {:?}",
+            search
         );
 
         let page = if page > 0 { page } else { 1 };
         let page_size = if page_size > 0 { page_size } else { 10 };
         let offset = (page - 1) * page_size;
 
-        info!(
-            "🔢 [Topups] Using pagination: LIMIT={} OFFSET={}",
-            page_size, offset
-        );
+        info!("🔢 [Topups] Using pagination: LIMIT={page_size} OFFSET={offset}");
 
         let mut select_query = Query::select();
         select_query
@@ -64,7 +61,7 @@ impl TopupRepositoryTrait for TopupRepository {
 
         if let Some(ref term) = search {
             select_query.and_where(Expr::col(TopupSchema::TopupNo).like(format!("{term}%")));
-            info!("🔍 [Topups] Filtering by topup_no prefix: {}%", term);
+            info!("🔍 [Topups] Filtering by topup_no prefix: {term}%");
         }
 
         let (sql, values) = select_query.build_sqlx(PostgresQueryBuilder);
@@ -80,7 +77,7 @@ impl TopupRepositoryTrait for TopupRepository {
                 rows
             }
             Err(e) => {
-                error!("❌ [Topups] Failed to fetch topups: {}", e);
+                error!("❌ [Topups] Failed to fetch topups: {e}");
                 return Err(AppError::SqlxError(e));
             }
         };
@@ -96,8 +93,8 @@ impl TopupRepositoryTrait for TopupRepository {
 
         let (count_sql, count_values) = count_query.build_sqlx(PostgresQueryBuilder);
         info!(
-            "📊 [Topups] Count query: {} | Values: {:?}",
-            count_sql, count_values
+            "📊 [Topups] Count query: {count_sql} | Values: {:?}",
+            count_values
         );
 
         let total_result = sqlx::query_as_with::<_, (i64,), _>(&count_sql, count_values)
@@ -106,26 +103,25 @@ impl TopupRepositoryTrait for TopupRepository {
 
         let total = match total_result {
             Ok((count,)) => {
-                info!("📈 [Topups] Total matching topups: {}", count);
+                info!("📈 [Topups] Total matching topups: {count}");
                 count
             }
             Err(e) => {
-                error!("❌ [Topups] Failed to count total topups: {}", e);
+                error!("❌ [Topups] Failed to count total topups: {e}");
                 return Err(AppError::SqlxError(e));
             }
         };
 
         info!(
-            "🎉 [Topups] Pagination completed: {} of {} topup(s) returned",
+            "🎉 [Topups] Pagination completed: {} of {total} topup(s) returned",
             topups.len(),
-            total
         );
 
         Ok((topups, total))
     }
 
     async fn find_by_id(&self, id: i32) -> Result<Option<Topup>, AppError> {
-        info!("🆔 [Topups] Finding topup by ID: {}", id);
+        info!("🆔 [Topups] Finding topup by ID: {id}");
 
         let (sql, values) = Query::select()
             .from(TopupSchema::Table)
@@ -142,19 +138,13 @@ impl TopupRepositoryTrait for TopupRepository {
             .and_where(Expr::col(TopupSchema::TopupId).eq(id))
             .build_sqlx(PostgresQueryBuilder);
 
-        info!(
-            "🧾 [Topups] Executing query: {} | Values: {:?}",
-            sql, values
-        );
+        info!("🧾 [Topups] Executing query: {sql} | Values: {:?}", values);
 
         let row = sqlx::query_as_with::<_, Topup, _>(&sql, values)
             .fetch_optional(&self.db_pool)
             .await
             .map_err(|e| {
-                error!(
-                    "❌ [Topups] Failed to execute query for topup_id={}: {}",
-                    id, e
-                );
+                error!("❌ [Topups] Failed to execute query for topup_id={id}: {e}",);
                 AppError::SqlxError(e)
             })?;
 
@@ -166,7 +156,7 @@ impl TopupRepositoryTrait for TopupRepository {
                 );
             }
             None => {
-                info!("🟡 [Topups] Not found for topup_id={}", id);
+                info!("🟡 [Topups] Not found for topup_id={id}");
             }
         }
 
@@ -174,7 +164,7 @@ impl TopupRepositoryTrait for TopupRepository {
     }
 
     async fn find_by_users(&self, id: i32) -> Result<Vec<Topup>, AppError> {
-        info!("👥 [Topups] Fetching all topups for user_id: {}", id);
+        info!("👥 [Topups] Fetching all topups for user_id: {id}");
 
         let (sql, values) = Query::select()
             .from(TopupSchema::Table)
@@ -191,33 +181,26 @@ impl TopupRepositoryTrait for TopupRepository {
             .and_where(Expr::col(TopupSchema::UserId).eq(id))
             .build_sqlx(PostgresQueryBuilder);
 
-        info!(
-            "🧾 [Topups] Executing query: {} | Values: {:?}",
-            sql, values
-        );
+        info!("🧾 [Topups] Executing query: {sql} | Values: {:?}", values);
 
         let rows = sqlx::query_as_with::<_, Topup, _>(&sql, values)
             .fetch_all(&self.db_pool)
             .await
             .map_err(|e| {
-                error!(
-                    "❌ [Topups] Failed to fetch topups for user_id={}: {}",
-                    id, e
-                );
+                error!("❌ [Topups] Failed to fetch topups for user_id={id}: {e}",);
                 AppError::SqlxError(e)
             })?;
 
         info!(
-            "✅ [Topups] Successfully retrieved {} topup(s) for user_id={}",
+            "✅ [Topups] Successfully retrieved {} topup(s) for user_id={id}",
             rows.len(),
-            id
         );
 
         Ok(rows)
     }
 
     async fn find_by_user(&self, id: i32) -> Result<Option<Topup>, AppError> {
-        info!("👤 [Topups] Finding one topup for user_id: {}", id);
+        info!("👤 [Topups] Finding one topup for user_id: {id}");
 
         let (sql, values) = Query::select()
             .from(TopupSchema::Table)
@@ -234,19 +217,13 @@ impl TopupRepositoryTrait for TopupRepository {
             .and_where(Expr::col(TopupSchema::UserId).eq(id))
             .build_sqlx(PostgresQueryBuilder);
 
-        info!(
-            "🧾 [Topups] Executing query: {} | Values: {:?}",
-            sql, values
-        );
+        info!("🧾 [Topups] Executing query: {sql} | Values: {:?}", values);
 
         let row = sqlx::query_as_with::<_, Topup, _>(&sql, values)
             .fetch_optional(&self.db_pool)
             .await
             .map_err(|e| {
-                error!(
-                    "❌ [Topups] Failed to execute query for user_id={}: {}",
-                    id, e
-                );
+                error!("❌ [Topups] Failed to execute query for user_id={id}: {e}",);
                 AppError::SqlxError(e)
             })?;
 
@@ -258,7 +235,7 @@ impl TopupRepositoryTrait for TopupRepository {
                 );
             }
             None => {
-                info!("🟡 [Topups] No topup found for user_id={}", id);
+                info!("🟡 [Topups] No topup found for user_id={id}");
             }
         }
 
@@ -293,18 +270,15 @@ impl TopupRepositoryTrait for TopupRepository {
             .returning_all()
             .build_sqlx(PostgresQueryBuilder);
 
-        info!(
-            "🧾 [Topups] Executing INSERT: {} | Values: {:?}",
-            sql, values
-        );
+        info!("🧾 [Topups] Executing INSERT: {sql} | Values: {:?}", values);
 
         let created = sqlx::query_as_with::<_, Topup, _>(&sql, values)
             .fetch_one(&self.db_pool)
             .await
             .map_err(|e| {
                 error!(
-                    "❌ [Topups] Failed to create topup for user_id={}: {}",
-                    input.user_id, e
+                    "❌ [Topups] Failed to create topup for user_id={}: {e}",
+                    input.user_id,
                 );
                 AppError::SqlxError(e)
             })?;
@@ -335,10 +309,7 @@ impl TopupRepositoryTrait for TopupRepository {
             .and_where(Expr::col(TopupSchema::TopupId).eq(input.topup_id))
             .build_sqlx(PostgresQueryBuilder);
 
-        info!(
-            "🧾 [Topups] Executing UPDATE: {} | Values: {:?}",
-            sql, values
-        );
+        info!("🧾 [Topups] Executing UPDATE: {sql} | Values: {:?}", values);
 
         let updated = sqlx::query_as_with::<_, Topup, _>(&sql, values)
             .fetch_one(&self.db_pool)
@@ -353,8 +324,8 @@ impl TopupRepositoryTrait for TopupRepository {
                 }
                 _ => {
                     error!(
-                        "❌ [Topups] Database error updating topup ID {}: {}",
-                        input.topup_id, e
+                        "❌ [Topups] Database error updating topup ID {}: {e}",
+                        input.topup_id,
                     );
                     AppError::SqlxError(e)
                 }
@@ -370,8 +341,8 @@ impl TopupRepositoryTrait for TopupRepository {
 
     async fn update_amount(&self, input: &UpdateTopupAmount) -> Result<Topup, AppError> {
         info!(
-            "💵 [Topups] Updating amount for topup ID {}: {} → {}",
-            input.topup_id, "current", input.topup_amount
+            "💵 [Topups] Updating amount for topup ID {}: {}",
+            input.topup_id, input.topup_amount
         );
 
         let (sql, values) = Query::update()
@@ -382,8 +353,8 @@ impl TopupRepositoryTrait for TopupRepository {
             .build_sqlx(PostgresQueryBuilder);
 
         info!(
-            "🧾 [Topups] Executing UPDATE amount: {} | Values: {:?}",
-            sql, values
+            "🧾 [Topups] Executing UPDATE amount: {sql} | Values: {:?}",
+            values
         );
 
         let updated = sqlx::query_as_with::<_, Topup, _>(&sql, values)
@@ -399,8 +370,8 @@ impl TopupRepositoryTrait for TopupRepository {
                 }
                 _ => {
                     error!(
-                        "❌ [Topups] Database error updating amount for topup ID {}: {}",
-                        input.topup_id, e
+                        "❌ [Topups] Database error updating amount for topup ID {}: {e}",
+                        input.topup_id,
                     );
                     AppError::SqlxError(e)
                 }
@@ -415,35 +386,29 @@ impl TopupRepositoryTrait for TopupRepository {
     }
 
     async fn delete(&self, id: i32) -> Result<(), AppError> {
-        info!("🗑️ [Topups] Deleting topup with ID: {}", id);
+        info!("🗑️ [Topups] Deleting topup with ID: {id}");
 
         let (sql, values) = Query::delete()
             .from_table(TopupSchema::Table)
             .and_where(Expr::col(TopupSchema::TopupId).eq(id))
             .build_sqlx(PostgresQueryBuilder);
 
-        info!(
-            "🧾 [Topups] Executing DELETE: {} | Values: {:?}",
-            sql, values
-        );
+        info!("🧾 [Topups] Executing DELETE: {sql} | Values: {:?}", values);
 
         let result = sqlx::query_with(&sql, values)
             .execute(&self.db_pool)
             .await
             .map_err(|e| {
-                error!("❌ [Topups] Failed to delete topup ID {}: {}", id, e);
+                error!("❌ [Topups] Failed to delete topup ID {id}: {e}");
                 AppError::SqlxError(e)
             })?;
 
         if result.rows_affected() == 0 {
-            error!("🟡 [Topups] Deletion failed: No topup found with ID {}", id);
-            return Err(AppError::NotFound(format!(
-                "Topup with ID {} not found",
-                id
-            )));
+            error!("🟡 [Topups] Deletion failed: No topup found with ID {id}");
+            return Err(AppError::NotFound(format!("Topup with ID {id} not found")));
         }
 
-        info!("✅ [Topups] Successfully deleted topup ID: {}", id);
+        info!("✅ [Topups] Successfully deleted topup ID: {id}");
         Ok(())
     }
 }

@@ -31,18 +31,15 @@ impl WithdrawRepositoryTrait for WithdrawRepository {
         search: Option<String>,
     ) -> Result<(Vec<Withdraw>, i64), AppError> {
         info!(
-            "📄 [Withdraw] Fetching all records - page: {}, page_size: {}, search: {:?}",
-            page, page_size, search
+            "📄 [Withdraw] Fetching all records - page: {page}, page_size: {page_size}, search: {:?}",
+            search
         );
 
         let page = if page > 0 { page } else { 1 };
         let page_size = if page_size > 0 { page_size } else { 10 };
         let offset = (page - 1) * page_size;
 
-        info!(
-            "🔢 [Withdraw] Using pagination: LIMIT={} OFFSET={}",
-            page_size, offset
-        );
+        info!("🔢 [Withdraw] Using pagination: LIMIT={page_size} OFFSET={offset}");
 
         let mut select_query = Query::select();
         select_query
@@ -62,14 +59,11 @@ impl WithdrawRepositoryTrait for WithdrawRepository {
         if let Some(ref term) = search {
             let search_id: i32 = term.parse().unwrap_or(0);
             select_query.and_where(Expr::col(WithdrawSchema::WithdrawId).eq(search_id));
-            info!("🔍 [Withdraw] Filtering by withdraw_id = {}", search_id);
+            info!("🔍 [Withdraw] Filtering by withdraw_id = {search_id}");
         }
 
         let (sql, values) = select_query.build_sqlx(PostgresQueryBuilder);
-        info!(
-            "🧾 [Withdraw] Generated SQL: {} | Values: {:?}",
-            sql, values
-        );
+        info!("🧾 [Withdraw] Generated SQL: {sql} | Values: {:?}", values);
 
         let withdraws_result = sqlx::query_as_with::<_, Withdraw, _>(&sql, values)
             .fetch_all(&self.db_pool)
@@ -81,10 +75,7 @@ impl WithdrawRepositoryTrait for WithdrawRepository {
                 rows
             }
             Err(e) => {
-                error!(
-                    "❌ [Withdraw] Failed to fetch withdraws from database: {}",
-                    e
-                );
+                error!("❌ [Withdraw] Failed to fetch withdraws from database: {e}",);
                 return Err(AppError::SqlxError(e));
             }
         };
@@ -111,26 +102,25 @@ impl WithdrawRepositoryTrait for WithdrawRepository {
 
         let total = match total_result {
             Ok((count,)) => {
-                info!("📊 [Withdraw] Total matching records: {}", count);
+                info!("📊 [Withdraw] Total matching records: {count}");
                 count
             }
             Err(e) => {
-                error!("❌ [Withdraw] Failed to count total withdraws: {}", e);
+                error!("❌ [Withdraw] Failed to count total withdraws: {e}");
                 return Err(AppError::SqlxError(e));
             }
         };
 
         info!(
-            "🎉 [Withdraw] Pagination completed: {} of {} records returned",
+            "🎉 [Withdraw] Pagination completed: {} of {total} records returned",
             withdraws.len(),
-            total
         );
 
         Ok((withdraws, total))
     }
 
     async fn find_by_id(&self, id: i32) -> Result<Option<Withdraw>, AppError> {
-        info!("🆔 [Withdraw] Finding withdraw by ID: {}", id);
+        info!("🆔 [Withdraw] Finding withdraw by ID: {id}");
 
         let (sql, values) = Query::select()
             .from(WithdrawSchema::Table)
@@ -146,18 +136,15 @@ impl WithdrawRepositoryTrait for WithdrawRepository {
             .build_sqlx(PostgresQueryBuilder);
 
         info!(
-            "🧾 [Withdraw] Executing query: {} | Values: {:?}",
-            sql, values
+            "🧾 [Withdraw] Executing query: {sql} | Values: {:?}",
+            values
         );
 
         let row = sqlx::query_as_with::<_, Withdraw, _>(&sql, values)
             .fetch_optional(&self.db_pool)
             .await
             .map_err(|e| {
-                error!(
-                    "❌ [Withdraw] Failed to execute query for withdraw_id={}: {}",
-                    id, e
-                );
+                error!("❌ [Withdraw] Failed to execute query for withdraw_id={id}: {e}");
                 AppError::SqlxError(e)
             })?;
 
@@ -169,7 +156,7 @@ impl WithdrawRepositoryTrait for WithdrawRepository {
                 );
             }
             None => {
-                info!("🟡 [Withdraw] Not found for withdraw_id={}", id);
+                info!("🟡 [Withdraw] Not found for withdraw_id={id}");
             }
         }
 
@@ -177,7 +164,7 @@ impl WithdrawRepositoryTrait for WithdrawRepository {
     }
 
     async fn find_by_users(&self, id: i32) -> Result<Vec<Withdraw>, AppError> {
-        info!("👥 [Withdraw] Finding all withdraws for user_id: {}", id);
+        info!("👥 [Withdraw] Finding all withdraws for user_id: {id}");
 
         let (sql, values) = Query::select()
             .from(WithdrawSchema::Table)
@@ -193,32 +180,28 @@ impl WithdrawRepositoryTrait for WithdrawRepository {
             .build_sqlx(PostgresQueryBuilder);
 
         info!(
-            "🧾 [Withdraw] Executing query: {} | Values: {:?}",
-            sql, values
+            "🧾 [Withdraw] Executing query: {sql} | Values: {:?}",
+            values
         );
 
         let rows = sqlx::query_as_with::<_, Withdraw, _>(&sql, values)
             .fetch_all(&self.db_pool)
             .await
             .map_err(|e| {
-                error!(
-                    "❌ [Withdraw] Failed to fetch withdraws for user_id={}: {}",
-                    id, e
-                );
+                error!("❌ [Withdraw] Failed to fetch withdraws for user_id={id}: {e}");
                 AppError::SqlxError(e)
             })?;
 
         info!(
-            "✅ [Withdraw] Successfully retrieved {} record(s) for user_id={}",
+            "✅ [Withdraw] Successfully retrieved {} record(s) for user_id={id}",
             rows.len(),
-            id
         );
 
         Ok(rows)
     }
 
     async fn find_by_user(&self, id: i32) -> Result<Option<Withdraw>, AppError> {
-        info!("👤 [Withdraw] Finding one withdraw for user_id: {}", id);
+        info!("👤 [Withdraw] Finding one withdraw for user_id: {id}");
 
         let (sql, values) = Query::select()
             .from(WithdrawSchema::Table)
@@ -234,18 +217,15 @@ impl WithdrawRepositoryTrait for WithdrawRepository {
             .build_sqlx(PostgresQueryBuilder);
 
         info!(
-            "🧾 [Withdraw] Executing query: {} | Values: {:?}",
-            sql, values
+            "🧾 [Withdraw] Executing query: {sql} | Values: {:?}",
+            values
         );
 
         let row = sqlx::query_as_with::<_, Withdraw, _>(&sql, values)
             .fetch_optional(&self.db_pool)
             .await
             .map_err(|e| {
-                error!(
-                    "❌ [Withdraw] Failed to execute query for user_id={}: {}",
-                    id, e
-                );
+                error!("❌ [Withdraw] Failed to execute query for user_id={id}: {e}");
                 AppError::SqlxError(e)
             })?;
 
@@ -257,7 +237,7 @@ impl WithdrawRepositoryTrait for WithdrawRepository {
                 );
             }
             None => {
-                info!("🟡 [Withdraw] No data found for user_id={}", id);
+                info!("🟡 [Withdraw] No data found for user_id={id}");
             }
         }
 
@@ -289,15 +269,15 @@ impl WithdrawRepositoryTrait for WithdrawRepository {
             .build_sqlx(PostgresQueryBuilder);
 
         info!(
-            "🧾 [Withdraw] Executing INSERT: {} | Values: {:?}",
-            sql, values
+            "🧾 [Withdraw] Executing INSERT: {sql} | Values: {:?}",
+            values
         );
 
         let row = sqlx::query_as_with::<_, Withdraw, _>(&sql, values)
             .fetch_one(&self.db_pool)
             .await
             .map_err(|e| {
-                error!("❌ [Withdraw] Failed to create withdrawal: {}", e);
+                error!("❌ [Withdraw] Failed to create withdrawal: {e}");
                 AppError::SqlxError(e)
             })?;
 
@@ -344,8 +324,8 @@ impl WithdrawRepositoryTrait for WithdrawRepository {
                 }
                 other => {
                     error!(
-                        "❌ [Withdraw] Failed to update withdraw ID {}: {}",
-                        input.withdraw_id, other
+                        "❌ [Withdraw] Failed to update withdraw ID {}: {other}",
+                        input.withdraw_id,
                     );
                     AppError::SqlxError(other)
                 }
@@ -376,22 +356,18 @@ impl WithdrawRepositoryTrait for WithdrawRepository {
             .execute(&self.db_pool)
             .await
             .map_err(|e| {
-                error!("❌ [Withdraw] Failed to delete withdraw ID {}: {}", id, e);
+                error!("❌ [Withdraw] Failed to delete withdraw ID {id}: {e}");
                 AppError::SqlxError(e)
             })?;
 
         if result.rows_affected() == 0 {
-            error!(
-                "🟡 [Withdraw] No data deleted: Withdraw with ID {} not found",
-                id
-            );
+            error!("🟡 [Withdraw] No data deleted: Withdraw with ID {id} not found",);
             return Err(AppError::NotFound(format!(
-                "Withdraw with ID {} not found",
-                id
+                "Withdraw with ID {id} not found",
             )));
         }
 
-        info!("✅ [Withdraw] Successfully deleted: ID={}", id);
+        info!("✅ [Withdraw] Successfully deleted: ID={id}");
         Ok(())
     }
 }

@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Extension, Path, Query, State},
+    extract::{Extension, Path, Query},
     http::StatusCode,
     middleware,
     response::IntoResponse,
@@ -11,6 +11,7 @@ use std::sync::Arc;
 use utoipa_axum::router::OpenApiRouter;
 
 use crate::{
+    abstract_trait::DynUserService,
     domain::{
         request::{FindAllUserRequest, RegisterRequest, UpdateUserRequest},
         response::{ApiResponse, ApiResponsePagination, user::UserResponse},
@@ -34,10 +35,10 @@ use crate::{
     )
 )]
 pub async fn get_users(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynUserService>,
     Query(params): Query<FindAllUserRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.user_service.get_users(&params).await {
+    match service.get_users(&params).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
     }
@@ -60,11 +61,11 @@ pub async fn get_users(
     )
 )]
 pub async fn get_user(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynUserService>,
     Path(id): Path<i32>,
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.user_service.get_user(id).await {
+    match service.get_user(id).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
 
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
@@ -86,10 +87,10 @@ pub async fn get_user(
     )
 )]
 pub async fn create_user(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynUserService>,
     SimpleValidatedJson(body): SimpleValidatedJson<RegisterRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.user_service.create_user(&body).await {
+    match service.create_user(&body).await {
         Ok(response) => Ok((StatusCode::CREATED, Json(json!(response)))),
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
     }
@@ -113,13 +114,13 @@ pub async fn create_user(
     )
 )]
 pub async fn update_user(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynUserService>,
     Path(id): Path<i32>,
     SimpleValidatedJson(mut body): SimpleValidatedJson<UpdateUserRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     body.id = id;
 
-    match data.di_container.user_service.update_user(&body).await {
+    match service.update_user(&body).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
 
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
@@ -143,11 +144,11 @@ pub async fn update_user(
     )
 )]
 pub async fn delete_user(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynUserService>,
     Path(id): Path<i32>,
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.user_service.delete_user(id).await {
+    match service.delete_user(id).await {
         Ok(_) => Ok((
             StatusCode::OK,
             Json(json!({
@@ -166,6 +167,7 @@ pub fn users_routes(app_state: Arc<AppState>) -> OpenApiRouter {
         .route("/api/users", post(create_user))
         .route("/api/users/{id}", put(update_user))
         .route("/api/users/{id}", delete(delete_user))
-        .route_layer(middleware::from_fn_with_state(app_state.clone(), jwt::auth))
-        .with_state(app_state.clone())
+        .route_layer(middleware::from_fn(jwt::auth))
+        .layer(Extension(app_state.di_container.user_service.clone()))
+        .layer(Extension(app_state.jwt_service.clone()))
 }

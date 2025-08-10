@@ -15,7 +15,7 @@ pub struct SaldoResponse {
     pub created_at: Option<DateTime<Utc>>,
 
     #[schema(format = "date-time")]
-    pub updated_at: Option<DateTime<Utc>>,p
+    pub updated_at: Option<DateTime<Utc>>,
 }
 
 impl From<Saldo> for SaldoResponse {

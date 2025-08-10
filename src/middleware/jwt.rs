@@ -1,19 +1,17 @@
 use axum::{
-    Json,
+    Extension, Json,
     body::Body,
-    extract::State,
     http::{Request, StatusCode, header},
     middleware::Next,
     response::IntoResponse,
 };
 use axum_extra::extract::cookie::CookieJar;
-use std::sync::Arc;
 
-use crate::{domain::response::ErrorResponse, state::AppState};
+use crate::{abstract_trait::DynJwtService, domain::response::ErrorResponse};
 
 pub async fn auth(
     cookie_jar: CookieJar,
-    State(data): State<Arc<AppState>>,
+    Extension(jwt): Extension<DynJwtService>,
     mut req: Request<Body>,
     next: Next,
 ) -> Result<impl IntoResponse, (StatusCode, Json<ErrorResponse>)> {
@@ -40,7 +38,7 @@ pub async fn auth(
         }
     };
 
-    let user_id = match data.jwt_config.verify_token(&token) {
+    let user_id = match jwt.verify_token(&token) {
         Ok(id) => id as i32,
         Err(_) => {
             return Err((

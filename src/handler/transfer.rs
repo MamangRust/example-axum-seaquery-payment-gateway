@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Extension, Path, Query, State},
+    extract::{Extension, Path, Query},
     http::StatusCode,
     middleware,
     response::IntoResponse,
@@ -11,6 +11,7 @@ use std::sync::Arc;
 use utoipa_axum::router::OpenApiRouter;
 
 use crate::{
+    abstract_trait::DynTransferService,
     domain::{
         request::{CreateTransferRequest, FindAllTransferRequest, UpdateTransferRequest},
         response::{ApiResponse, ApiResponsePagination, transfer::TransferResponse},
@@ -34,15 +35,10 @@ use crate::{
     )
 )]
 pub async fn get_transfers(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynTransferService>,
     Query(params): Query<FindAllTransferRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data
-        .di_container
-        .transfer_service
-        .get_transfers(&params)
-        .await
-    {
+    match service.get_transfers(&params).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
     }
@@ -65,11 +61,11 @@ pub async fn get_transfers(
     )
 )]
 pub async fn get_transfer(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynTransferService>,
     Path(id): Path<i32>,
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.transfer_service.get_transfer(id).await {
+    match service.get_transfer(id).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
 
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
@@ -93,16 +89,11 @@ pub async fn get_transfer(
     )
 )]
 pub async fn get_transfer_users(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynTransferService>,
     Path(id): Path<i32>,
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data
-        .di_container
-        .transfer_service
-        .get_transfer_users(id)
-        .await
-    {
+    match service.get_transfer_users(id).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
 
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
@@ -126,16 +117,11 @@ pub async fn get_transfer_users(
     )
 )]
 pub async fn get_transfer_user(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynTransferService>,
     Path(id): Path<i32>,
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data
-        .di_container
-        .transfer_service
-        .get_transfer_user(id)
-        .await
-    {
+    match service.get_transfer_user(id).await {
         Ok(saldo) => Ok((StatusCode::OK, Json(json!(saldo)))),
 
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
@@ -157,15 +143,10 @@ pub async fn get_transfer_user(
     )
 )]
 pub async fn create_transfer(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynTransferService>,
     SimpleValidatedJson(body): SimpleValidatedJson<CreateTransferRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data
-        .di_container
-        .transfer_service
-        .create_transfer(&body)
-        .await
-    {
+    match service.create_transfer(&body).await {
         Ok(response) => Ok((StatusCode::CREATED, Json(json!(response)))),
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
     }
@@ -189,18 +170,13 @@ pub async fn create_transfer(
     )
 )]
 pub async fn update_transfer(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynTransferService>,
     Path(id): Path<i32>,
     SimpleValidatedJson(mut body): SimpleValidatedJson<UpdateTransferRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
     body.transfer_id = id;
 
-    match data
-        .di_container
-        .transfer_service
-        .update_transfer(&body)
-        .await
-    {
+    match service.update_transfer(&body).await {
         Ok(response) => Ok((StatusCode::OK, Json(json!(response)))),
 
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!(e)))),
@@ -224,11 +200,11 @@ pub async fn update_transfer(
     )
 )]
 pub async fn delete_transfer(
-    State(data): State<Arc<AppState>>,
+    Extension(service): Extension<DynTransferService>,
     Path(id): Path<i32>,
     Extension(_user_id): Extension<i64>,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    match data.di_container.topup_service.delete_topup(id).await {
+    match service.delete_transfer(id).await {
         Ok(_) => Ok((
             StatusCode::OK,
             Json(json!({
@@ -249,6 +225,7 @@ pub fn transfers_routes(app_state: Arc<AppState>) -> OpenApiRouter {
         .route("/api/transfers", post(create_transfer))
         .route("/api/transfers/{id}", put(update_transfer))
         .route("/api/transfers/{id}", delete(delete_transfer))
-        .route_layer(middleware::from_fn_with_state(app_state.clone(), jwt::auth))
-        .with_state(app_state.clone())
+        .route_layer(middleware::from_fn(jwt::auth))
+        .layer(Extension(app_state.di_container.transfer_service.clone()))
+        .layer(Extension(app_state.jwt_service.clone()))
 }
