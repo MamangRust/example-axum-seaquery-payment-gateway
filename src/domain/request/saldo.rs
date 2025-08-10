@@ -57,10 +57,10 @@ pub struct UpdateSaldoRequest {
 
 impl UpdateSaldoRequest {
     pub fn extra_validate(&self) -> Result<(), String> {
-        if let Some(amount) = self.withdraw_amount {
-            if amount < 50000 {
-                return Err("Withdraw amount must be at least 50000".to_string());
-            }
+        if let Some(amount) = self.withdraw_amount
+            && amount < 50000
+        {
+            return Err("Withdraw amount must be at least 50000".to_string());
         }
 
         if self.withdraw_amount.is_none() && self.withdraw_time.is_none() {
@@ -99,14 +99,14 @@ pub struct UpdateSaldoWithdraw {
 
 impl UpdateSaldoWithdraw {
     pub fn extra_validate(&self) -> Result<(), String> {
-        if let Some(amount) = self.withdraw_amount {
-            if amount <= 0 {
+        match self.withdraw_amount {
+            Some(amount) if amount <= 0 => {
                 return Err("Withdraw amount must be greater than 0".to_string());
             }
-
-            if amount > self.total_balance {
+            Some(amount) if amount > self.total_balance => {
                 return Err("Withdraw amount cannot be greater than total balance".to_string());
             }
+            _ => {}
         }
 
         if self.withdraw_amount.is_some() && self.withdraw_time.is_none() {
